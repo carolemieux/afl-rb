@@ -20,7 +20,10 @@
 #include "types.h"
 #include "config.h"
 
+/* Terminal colors */
+
 #ifdef USE_COLOR
+
 #  define cBLK "\x1b[0;30m"
 #  define cRED "\x1b[0;31m"
 #  define cGRN "\x1b[0;32m"
@@ -38,7 +41,9 @@
 #  define cLCY "\x1b[1;36m"
 #  define cBRI "\x1b[1;37m"
 #  define cRST "\x1b[0m"
+
 #else
+
 #  define cBLK ""
 #  define cRED ""
 #  define cGRN ""
@@ -56,50 +61,100 @@
 #  define cLCY ""
 #  define cBRI ""
 #  define cRST ""
+
 #endif /* ^USE_COLOR */
+
+/* Box drawing sequences */
+
+#ifdef FANCY_BOXES
+
+#  define bSTART  "\x1b(0"        /* Enter box drawing mode    */
+#  define bSTOP   "\x1b(B"        /* Exit box drawing mode     */
+#  define bH      "q"             /* Horizontal line           */
+#  define bV      "x"             /* Vertical line             */
+#  define bLT     "l"             /* Left top corner           */
+#  define bRT     "k"             /* Right top corner          */
+#  define bLB     "m"             /* Left bottom corner        */
+#  define bRB     "j"             /* Right bottom corner       */
+#  define bX      "n"             /* Cross                     */
+#  define bVR     "t"             /* Vertical, branch right    */
+#  define bVL     "u"             /* Vertical, branch left     */
+#  define bHT     "v"             /* Horizontal, branch top    */
+#  define bHB     "w"             /* Horizontal, branch bottom */
+
+#else
+
+#  define bSTART  ""
+#  define bSTOP   ""
+#  define bH      "-"
+#  define bV      "|"
+#  define bLT     "+"
+#  define bRT     "+"
+#  define bLB     "+"
+#  define bRB     "+"
+#  define bX      "+"
+#  define bVR     "+"
+#  define bVL     "+"
+#  define bHT     "+"
+#  define bHB     "+"
+
+#endif /* ^FANCY_BOXES */
+
+/* Misc terminal codes */
 
 #define TERM_HOME     "\x1b[H"
 #define TERM_CLEAR    TERM_HOME "\x1b[2J"
 #define cEOL          "\x1b[0K"
 
-#define ERRORF(x...)  fprintf(stderr, x)
-#define SAYF(x...)    printf(x)
+/* Debug & error macros */
+
+#ifdef MESSAGES_TO_STDOUT
+#  define SAYF(x...)    printf(x)
+#else 
+#  define SAYF(x...)    fprintf(stderr, x)
+#endif /* ^MESSAGES_TO_STDOUT */
 
 #define WARNF(x...) do { \
-    ERRORF(cYEL "[!] " cBRI "WARNING: " cNOR x); \
-    ERRORF(cRST "\n"); \
+    SAYF(cYEL "[!] " cBRI "WARNING: " cNOR x); \
+    SAYF(cRST "\n"); \
   } while (0)
 
 #define OKF(x...) do { \
-    ERRORF(cLGN "[+] " cNOR x); \
-    ERRORF(cRST "\n"); \
+    SAYF(cLGN "[+] " cNOR x); \
+    SAYF(cRST "\n"); \
   } while (0)
 
 #define ACTF(x...) do { \
-    ERRORF(cLBL "[*] " cNOR x); \
-    ERRORF(cRST "\n"); \
+    SAYF(cLBL "[*] " cNOR x); \
+    SAYF(cRST "\n"); \
+  } while (0)
+
+#define BADF(x...) do { \
+    SAYF(cLRD "\n[-] " cNOR x); \
+    SAYF(cRST "\n"); \
   } while (0)
 
 #define FATAL(x...) do { \
-    ERRORF(cLRD "\n[-] PROGRAM ABORT : " cBRI x); \
-    ERRORF(cLRD "\n         Location : " cNOR "%s(), %s:%u\n\n" cRST, \
-           __FUNCTION__, __FILE__, __LINE__); \
+    SAYF(cLRD "\n[-] PROGRAM ABORT : " cBRI x); \
+    SAYF(cLRD "\n         Location : " cNOR "%s(), %s:%u\n\n" cRST, \
+         __FUNCTION__, __FILE__, __LINE__); \
     exit(1); \
   } while (0)
 
 #define ABORT(x...) do { \
-    ERRORF(cLRD "\n[-] PROGRAM ABORT : " cBRI x); \
-    ERRORF(cLRD "\n    Stop location : " cNOR "%s(), %s:%u\n\n" cRST, \
-           __FUNCTION__, __FILE__, __LINE__); \
+    SAYF(cLRD "\n[-] PROGRAM ABORT : " cBRI x); \
+    SAYF(cLRD "\n    Stop location : " cNOR "%s(), %s:%u\n\n" cRST, \
+         __FUNCTION__, __FILE__, __LINE__); \
     abort(); \
   } while (0)
 
 #define PFATAL(x...) do { \
-    ERRORF(cLRD "\n[-]  SYSTEM ERROR : " cBRI x); \
-    ERRORF(cLRD "\n    Stop location : " cNOR "%s(), %s:%u\n", \
-           __FUNCTION__, __FILE__, __LINE__); \
+    SAYF(cLRD "\n[-]  SYSTEM ERROR : " cBRI x); \
+    SAYF(cLRD "\n    Stop location : " cNOR "%s(), %s:%u\n", \
+         __FUNCTION__, __FILE__, __LINE__); \
+    fflush(stdout); \
     perror(cLRD "       OS message " cNOR); \
-    ERRORF(cRST "\n"); \
+    SAYF(cRST "\n"); \
     exit(1); \
   } while (0)
 

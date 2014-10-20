@@ -142,7 +142,7 @@ although not strictly necessary.
 
 There is limited value in providing multiple files that are not fundamentally
 different from each other, and exercise the same set of features. When in
-doubt, use fewer samples, not more. One test cases is perfectly fine in most
+doubt, use fewer samples, not more. One test case is perfectly fine in most
 scenarios.
 
 If a large corpus of data is available for screening, the afl-showmap utility
@@ -232,11 +232,15 @@ Here are some of the most important caveats for AFL:
 
   - The fuzzer is optimized for compact binary data formats, such as images
     and other multimedia. It is not well-suited for verbose, human-readable
-    formats such as HTML or JavaScript. In such cases, template- or ABNF-based
+    formats such as XHTML or JavaScript. In such cases, template- or ABNF-based
     generators tend to fare better.
 
-    To modify the code to generate syntax-aware mutations, you'd need to start
-    with fuzz_one() in afl-fuzz.c.
+    (The fuzzer can still give a good workout to the first line of XML or JS
+    parsing, just won't be able to guess higher-order syntax particularly
+    well.)
+
+    If you want to modify the code to generate syntax-aware mutations, you'd
+    need to start with fuzz_one() in afl-fuzz.c.
 
   - The fuzzer offers limited coverage if encryption, checksums, cryptographic
     signatures, or compression are used to wholly wrap the actual data format

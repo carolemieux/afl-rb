@@ -1,8 +1,22 @@
 --------------
+Version 0.39b:
+--------------
+
+  - Redesigned status screen, now 90% more spiffy.
+
+  - More verbose and user-friendly messages for some common problems.
+
+  - Resuming now reconstructs path depth, too.
+
+--------------
 Version 0.38b:
 --------------
 
   - Fixed an fd leak and +cov tracking bug resulting from changes in 0.37b.
+
+  - Screen update speed now auto-adjusts.
+
+  - Visual indication of non-instrumented mode.
 
 --------------
 Version 0.37b:

@@ -177,8 +177,8 @@ static void add_instrumentation(void) {
   fclose(outf);
 
   if (!ins_lines) WARNF("No instrumentation targets found.");
-    else ERRORF(cLGN "[+]" cRST " Successfully instrumented %u locations "
-         "(seed = 0x%08x).\n", ins_lines, rand_seed);
+  else OKF("Successfully instrumented %u locations (seed = 0x%08x).",
+           ins_lines, rand_seed);
 
 }
 
@@ -193,15 +193,15 @@ int main(int argc, char** argv) {
   struct timeval tv;
   struct timezone tz;
 
-  ERRORF(cCYA "afl-as " cBRI VERSION cNOR " (" __DATE__ " " __TIME__ 
-         ") by <lcamtuf@google.com>\n");
+  SAYF(cCYA "afl-as " cBRI VERSION cNOR " (" __DATE__ " " __TIME__ 
+       ") by <lcamtuf@google.com>\n");
 
   if (argc < 2) {
 
-    ERRORF("\n"
-          "This is a helper application for afl-fuzz. It is a wrapper around GNU 'as',\n"
-          "executed by the toolchain whenever using afl-gcc. You probably don't want to\n"
-          "run this program directly.\n\n");
+    SAYF("\n"
+         "This is a helper application for afl-fuzz. It is a wrapper around GNU 'as',\n"
+         "executed by the toolchain whenever using afl-gcc. You probably don't want to\n"
+         "run this program directly.\n\n");
 
     exit(1);
 

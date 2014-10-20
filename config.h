@@ -33,8 +33,11 @@
 
 #define USE_COLOR
 
-/* Default timeout for fuzzed code (milliseconds). This is the upper bound; the
-   fuzzer will pick a lower value dynamically unless -t option is given: */
+/* Comment out to disable fancy boxes and use poor man's drawings: */
+
+#define FANCY_BOXES
+
+/* Default timeout for fuzzed code (milliseconds): */
 
 #define EXEC_TIMEOUT        1000
 
@@ -87,11 +90,11 @@
 #define HAVOC_BLK_MEDIUM    128
 #define HAVOC_BLK_LARGE     1500
 
-/* Likelihood of using seemingly redundant inputs within one fuzzing
+/* Likelihood of using non-favored inputs within one fuzzing
    cycle, in percent: */
 
 #define SKIP_TO_NEW_PROB    99
-#define SKIP_RED_PROB       94
+#define SKIP_NFAV_PROB      94
 
 /* Splicing cycle count: */
 
@@ -190,6 +193,10 @@
 /* Maximum size of input file (keep under 100MB): */
 
 #define MAX_FILE            (1 * 1000 * 1000)
+
+/* UI refresh frequency (Hz): */
+
+#define UI_TARGET_HZ        4
 
 /* Uncomment this to use inferior coverage-based instrumentation. Note that
    you need to recompile the target binary for this to have any effect! */

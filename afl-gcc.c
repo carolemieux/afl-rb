@@ -185,16 +185,18 @@ static void edit_params(u32 argc, char** argv) {
 
 int main(int argc, char** argv) {
 
-  ERRORF(cCYA "afl-gcc " cBRI VERSION cNOR " (" __DATE__ " " __TIME__
+  SAYF(cCYA "afl-gcc " cBRI VERSION cNOR " (" __DATE__ " " __TIME__
          ") by <lcamtuf@google.com>\n");
 
   if (argc < 2) {
 
-    ERRORF("\n"
-           "This is a helper application for afl-fuzz. It serves as a drop-in\n"
-           "replacement for gcc, letting you recompile third-party code with\n"
-           "the required runtime instrumentation. A common use pattern would be:\n\n"
-           "  CC=/usr/local/bin/afl-gcc ./configure\n\n");
+    SAYF("\n"
+         "This is a helper application for afl-fuzz. It serves as a drop-in\n"
+         "replacement for gcc, letting you recompile third-party code with\n"
+         "the required runtime instrumentation. A common use pattern would be:\n\n"
+
+         "  CC=/usr/local/bin/afl-gcc ./configure\n\n");
+
     exit(1);
 
   }
