@@ -168,7 +168,6 @@ static void edit_params(u32 argc, char** argv) {
 
 #ifdef USE_ASAN
     gcc_params[gcc_par_cnt++] = "-fsanitize=address";
-    gcc_params[gcc_par_cnt++] = "-fsanitize=memory";
 #endif /* USE_ASAN */
 
     if (!fortify_set)

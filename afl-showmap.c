@@ -52,6 +52,29 @@ static s32 shm_id;                    /* ID of the SHM region             */
 static u8  sink_output;               /* Sink program output              */
 
 
+/* Classify tuple counts. */
+
+static void classify_counts(u8* mem) {
+
+  u32 i = MAP_SIZE;
+
+  while (i--) {
+
+    switch (*mem) {
+      case 3:           *mem = (1 << 2); break;
+      case 4 ... 7:     *mem = (1 << 3); break;
+      case 8 ... 15:    *mem = (1 << 4); break;
+      case 16 ... 31:   *mem = (1 << 5); break;
+      case 32 ... 127:  *mem = (1 << 6); break;
+      case 128 ... 255: *mem = (1 << 7); break;
+    }
+
+    mem++;
+
+  }
+
+}
+
 /* Show all recorded tuples. */
 
 static inline void show_tuples(void) {
@@ -59,13 +82,11 @@ static inline void show_tuples(void) {
   u8* current = (u8*)trace_bits;
   u32 i;
 
+  classify_counts(trace_bits);
+
   for (i = 0; i < MAP_SIZE; i++) {
 
-    u8 b;
-
-    for (b = 0; b < 8; b++)
-      if (*current & (1 << b))
-        SAYF("%05u/%u\n", i, b);
+    if (*current) SAYF("%05u/%u\n", i, *current);
 
     current++;
 
@@ -188,7 +209,7 @@ static void run_target(char** argv) {
       read(st_pipe[0], &child_pid, 4) != 4 || child_pid <= 0 ||
       read(st_pipe[0], &status, 4) != 4) {
 
-    FATAL("Fork server is misbehaving, sorry");
+    FATAL("No instrumentation detected");
 
   }
 

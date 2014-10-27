@@ -1,4 +1,28 @@
 --------------
+Version 0.41b:
+--------------
+
+  - Fork server fix for processes that call execve().
+
+  - Minor compatibility fixes to Makefile, afl-gcc (reported by jwilk).
+
+  - Fixes to triage_crashes.sh (ditto).
+
+  - Multiple instrumentation performance improvements.
+
+  - Visual indication of the number of imported paths.
+
+  - Fix to afl-showmap.
+
+--------------
+Version 0.40b:
+--------------
+
+  - Proper support for parallelized fuzzing.
+
+  - Added an example in experimental/distributed_fuzzing/
+
+--------------
 Version 0.39b:
 --------------
 
@@ -7,6 +31,16 @@ Version 0.39b:
   - More verbose and user-friendly messages for some common problems.
 
   - Resuming now reconstructs path depth, too.
+
+  - Core dumps are inhibited to improve the ability to detect SEGV.
+
+  - A check for redirection of core dumps to files.
+
+  - Minor improvement to the handling of variable paths.
+
+  - Additional performance improvements and tighter mem limits by default.
+
+  - Performance tips added in docs/.
 
 --------------
 Version 0.38b:

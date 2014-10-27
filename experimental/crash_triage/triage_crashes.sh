@@ -50,26 +50,18 @@ fi
 
 echo
 
-for sig_dir in $DIR/crashes/*; do
+for crash_dir in $DIR/crashes/*; do
 
-  sig=`basename -- "$sig_dir" | cut -d- -f2`
+  sig=`basename -- "$crash_dir" | cut -d, -f1 | cut -d: -f2`
+  hash=`basename -- "$crash_dir" | cut -d, -f2 | cut -d: -f2`
+  count=`ls -- "$crash_dir" | wc -l`
 
-  echo "=== CASES FOR SIGNAL $sig ==="
+  echo "+++ HASH $hash, SIGNAL $sig ($count samples) +++"
   echo
 
-  for hash_dir in $sig_dir/*; do
+  first=`ls -- "$crash_dir" |  head -1`
 
-    hash=`basename -- "$hash_dir"`
-    count=`ls -- $hash_dir/* | wc -l`
-
-    echo "+++ HASH $hash, SIGNAL $sig ($count crashes) +++"
-    echo
-
-    FIRST=`ls -d -- $hash_dir/* |  head -1`
-
-    gdb --batch -q --ex "r <$FIRST" --ex 'back' --ex 'disass $eip, $eip+16' --ex 'info reg' --ex 'quit' "$BIN"
-    echo
-
-  done
+  gdb --batch -q --ex "r <$crash_dir/$first" --ex 'back' --ex 'disass $eip, $eip+16' --ex 'info reg' --ex 'quit' "$BIN"
+  echo
 
 done

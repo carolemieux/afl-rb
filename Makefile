@@ -14,7 +14,7 @@
 #
 
 PROGNAME    = afl
-VERSION     = 0.39b
+VERSION     = 0.41b
 
 BIN_PATH    = /usr/local/bin
 HELPER_PATH = /usr/local/lib/afl
@@ -59,7 +59,7 @@ clean:
 
 install: all
 	install afl-gcc afl-g++ afl-fuzz afl-showmap $(BIN_PATH)
-	mkdir -m 755 $(HELPER_PATH) 2>/dev/null || continue
+	mkdir -p -m 755 $(HELPER_PATH) 2>/dev/null
 	install afl-as as $(HELPER_PATH)
 
 publish: clean

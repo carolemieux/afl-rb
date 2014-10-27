@@ -43,7 +43,7 @@
 
 /* Default memory limit for child process (MB): */
 
-#define MEM_LIMIT           100
+#define MEM_LIMIT           20
 
 /* Number of calibration cycles per every new test case, and for cases
    where variable execution paths are detected: */
@@ -61,7 +61,7 @@
 
 /* Maximum number of unique hangs or crashes to record: */
 
-#define KEEP_UNIQUE_HANG    1000
+#define KEEP_UNIQUE_HANG    500
 #define KEEP_UNIQUE_CRASH   5000
 
 /* Number of random tweaks during a single 'havoc' stage: */
@@ -94,7 +94,7 @@
    cycle, in percent: */
 
 #define SKIP_TO_NEW_PROB    99
-#define SKIP_NFAV_PROB      94
+#define SKIP_NFAV_PROB      92
 
 /* Splicing cycle count: */
 
@@ -107,6 +107,18 @@
 /* Maximum value for integer addition / subtraction stages: */
 
 #define ARITH_MAX           35
+
+/* Maximum size of input file (keep under 100MB): */
+
+#define MAX_FILE            (1 * 1000 * 1000)
+
+/* UI refresh frequency (Hz): */
+
+#define UI_TARGET_HZ        4
+
+/* Sync interval (havoc cycles): */
+
+#define SYNC_INTERVAL       10
 
 /* List of interesting values to use in fuzzing. */
 
@@ -189,14 +201,6 @@
 /* Maximum allocator request size (keep well under INT_MAX): */
 
 #define MAX_ALLOC           0x40000000
-
-/* Maximum size of input file (keep under 100MB): */
-
-#define MAX_FILE            (1 * 1000 * 1000)
-
-/* UI refresh frequency (Hz): */
-
-#define UI_TARGET_HZ        4
 
 /* Uncomment this to use inferior coverage-based instrumentation. Note that
    you need to recompile the target binary for this to have any effect! */

@@ -1,21 +1,5 @@
 Here's my current wishlist for afl:
 
-  - Proper distributed fuzzing support. Probably something like this:
-
-    - Master publishes a list of test cases to fuzz (det or havoc),
-      along with current bitmap
-
-    - Clients can claim a test case and do one round of fuzzing,
-
-    - Clients phone back with any new bits,
-
-    - Server decides to accept and ask for test cases, or reject.
-
-    - Clients ask for another test case.
-
-    - If a client disconnects, its pending test case is returned to the
-      bunch.
-
   - Part #2 of Jann's fork server patch.
 
   - ARM port.

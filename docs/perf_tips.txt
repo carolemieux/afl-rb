@@ -1,0 +1,43 @@
+The fuzzer is designed to need ~1 core per job. This means that one an 8-core
+system, you can easily run eight different fuzzing jobs with relatively little
+performance hit. When running more than that, the performance should degrade
+fairly linearly.
+
+At this point, there is no sophisticated parallelization functionality; you can
+run multiple jobs targeting the same binary with the -d (random-only) flag for
+naive parallelism, but this is far from being optimal. Better parallelization
+will be added in the future.
+
+If the fuzzing process is slow, there are several things to try:
+
+  - Choose simple and small initial test cases. For example, if you are fuzzing
+    image parsers, don't start with a folder of your vacation photos - generate
+    a tiny 16x16 picture and run it through jpegtran or pngcrunch.
+
+  - Consider using a simpler target binary. For example, for image formats,
+    bundled utilities such as djpeg, readpng, or gifhisto are considerably
+    faster than convert from ImageMagick.
+
+  - Lower the amount of memory available to the program to 10 MB or so (-m 10).
+    Some programs end up spending a lot of time allocating and initializing
+    megabytes of memory for some pathological inputs; this can make them give
+    up sooner without necessarily sacrificing coverage.
+
+  - See if the targeted binary is doing anything obviously slow (try strace -tt).
+    Perhaps it will run faster if you specify /dev/null as a config file,
+    if you disable some features on compile time (./configure --help), or if you
+    change the command line a bit?
+
+  - Avoid fuzzing on systems that are low on free physical memory, under heavy
+    CPU load, or that are using NFS.
+
+If you're just hoping to gain few percent more execs per second, the following
+scheduler tweaks may help:
+
+echo 1 >/proc/sys/kernel/sched_child_runs_first
+echo 1 >/proc/sys/kernel/sched_autogroup_enabled
+echo 50000000 >/proc/sys/kernel/sched_migration_cost [*]
+echo 250000000 >/proc/sys/kernel/sched_latency_ns
+
+[*] This may be sched_migration_cost_ns on some systems.
+

@@ -181,8 +181,10 @@ The deterministic stage takes time proportional to the size of the input file;
 once this is done, the havoc stages continue for every discovered input until
 Ctrl-C is hit.
 
-For large inputs, or when trying to distribute the fuzzing process, you can
-use -d to skip the deterministic stages and proceed straight to random tweaks.
+For large inputs, you can use -d to skip the deterministic stages and proceed
+straight to random tweaks. Some other tips for optimizing the performance of
+the process are discussed in the perf_tips.txt file included with the source
+code of AFL.
 
 6) Interpreting output
 ----------------------
@@ -223,9 +225,16 @@ self-explanatory metadata appended, too.
 Although the fuzzer does not perform any additional analysis of the discovered
 crashes, the path-based grouping makes it easy to triage new finds manually - or
 to examine them with a simple GDB script. One such script is provided in
-experimental/gdb/.
+experimental/crash_triage/.
 
-7) Known limitations & areas for improvement
+7) Parallelized fuzzing
+-----------------------
+
+For tips on how to fuzz a common target on multiple cores or multiple networked
+machines, please refer to the parallel_fuzzing.txt file included with the source
+code of American Fuzzy Lop.
+
+8) Known limitations & areas for improvement
 --------------------------------------------
 
 Here are some of the most important caveats for AFL:
@@ -251,7 +260,7 @@ Here are some of the most important caveats for AFL:
     fuzzer-generated data before feeding it to the target program.
 
     As an example, a patch for libpng to bypass CRC checksums is provided in 
-    experimental/libpng/libpng-nocrc.patch.
+    experimental/libpng_no_checksum/libpng-nocrc.patch.
 
   - The included instrumentation (afl-as.h) currently supports 32-bit x86 code
     by default, with the option to go 64-bit by uncommenting USE_64BIT in
@@ -270,11 +279,7 @@ Here are some of the most important caveats for AFL:
     supported at this point. Leveraging pin or DynamoRIO may be a good
     approach.
 
-  - Although it is possible to instrument multi-threaded applications, random
-    variations in thread execution order will confuse the fuzzer and probably
-    not yield good results.
-
-8) Contact
+9) Contact
 ----------
 
 Questions? Concerns? Bug reports? The author can be usually reached at

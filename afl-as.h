@@ -37,6 +37,27 @@
 #define STRINGIFY_INTERNAL(x) #x
 #define STRINGIFY(x) STRINGIFY_INTERNAL((x))
 
+/* Some notes about making the instrumentation perform better:
+
+   - Only the trampoline_fmt and the non-setup __afl_maybe_log code paths are
+     really worth optimizing; the setup / fork server stuff matters a lot less.
+
+   - Interestingly, this code isn't a lot faster if we store a variable
+     pointer to the setup, log, or return routine and then do a register call
+     from within trampoline_fmt (it speeds up non-instrumented execution quite a
+     bit, though, since that path just becomes push-call-ret-pop).
+
+   - There is also not a whole lot to be gained by doing SHM attach at a
+     fixed address instead of retrieving __afl_area_ptr. There was essentially
+     no measurable gain, so I didn't make that optimization to minimize the
+     likelihood of problems if the hardcoded region is already mapped for
+     whatever reason.
+
+   - pushf / popf is *awfully* slow, which is why we're doing the lahf /
+     sahf + overflow test trick.
+
+ */
+
 static const u8* trampoline_fmt =
 
 #ifndef USE_64BIT
@@ -46,12 +67,16 @@ static const u8* trampoline_fmt =
   "\n"
   ".align 8\n"
   "\n"
-  "pushl %%ecx\n"
-  "pushl %%eax\n"
-  "movl  $0x%08x, %%ecx\n"
-  "call  __afl_maybe_log\n"
-  "popl  %%eax\n"
-  "popl  %%ecx\n"
+  "leal -12(%%esp), %%esp\n"
+  "movl %%edx, 0(%%esp)\n"
+  "movl %%ecx, 4(%%esp)\n"
+  "movl %%eax, 8(%%esp)\n"
+  "movl $0x%08x, %%ecx\n"
+  "call __afl_maybe_log\n"
+  "movl 0(%%esp), %%edx\n"
+  "movl 4(%%esp), %%ecx\n"
+  "movl 8(%%esp), %%eax\n"
+  "leal 12(%%esp), %%esp\n"
   "\n"
   "/* --- END --- */\n"
   "\n";
@@ -63,12 +88,16 @@ static const u8* trampoline_fmt =
   "\n"
   ".align 8\n"
   "\n"
-  "pushq %%rcx\n"
-  "pushq %%rax\n"
-  "movq  $0x%08x, %%rcx\n"
-  "call  __afl_maybe_log\n"
-  "popq  %%rax\n"
-  "popq  %%rcx\n"
+  "leaq -24(%%rsp), %%rsp\n"
+  "movq %%rdx, 0(%%rsp)\n"
+  "movq %%rcx, 8(%%rsp)\n"
+  "movq %%rax, 16(%%rsp)\n"
+  "movq $0x%08x, %%rcx\n"
+  "call __afl_maybe_log\n"
+  "movq 0(%%rsp), %%rdx\n"
+  "movq 8(%%rsp), %%rcx\n"
+  "movq 16(%%rsp), %%rax\n"
+  "leaq 24(%%rsp), %%rsp\n"
   "\n"
   "/* --- END --- */\n"
   "\n";
@@ -89,12 +118,11 @@ static const u8* main_payload =
   "\n"
   "  lahf\n"
   "  seto %al\n"
-  "  movw %ax, __afl_saved_flags\n"
   "\n"
   "  /* Check if SHM region is already mapped. */\n"
   "\n"
-  "  movl  __afl_area_ptr, %eax\n"
-  "  testl %eax, %eax\n"
+  "  movl  __afl_area_ptr, %edx\n"
+  "  testl %edx, %edx\n"
   "  je    __afl_setup\n"
   "\n"
   "__afl_store:\n"
@@ -104,19 +132,16 @@ static const u8* main_payload =
 #ifndef COVERAGE_ONLY
   "  xorl __afl_prev_loc, %ecx\n"
   "  xorl %ecx, __afl_prev_loc\n"
-  "  xorl $" STRINGIFY(MAP_SIZE-1) ", __afl_prev_loc\n"
 #endif /* !COVERAGE_ONLY */
-  "  addl %ecx, %eax\n"
   "\n"
 #ifdef COVERAGE_ONLY
-  "  orb  $1, (%eax)\n"
+  "  orb  $1, (%edx, %ecx, 1)\n"
 #else
-  "  incb (%eax)\n"
+  "  incb (%edx, %ecx, 1)\n"
 #endif /* ^COVERAGE_ONLY */
   "\n"
   "__afl_return:\n"
   "\n"
-  "  movw __afl_saved_flags, %ax\n"
   "  addb $127, %al\n"
   "  sahf\n"
   "  ret\n"
@@ -132,8 +157,8 @@ static const u8* main_payload =
   "\n"
   "  /* Map SHM, jumping to __afl_setup_abort if something goes wrong. */\n"
   "\n"
+  "  pushl %eax\n"
   "  pushl %ecx\n"
-  "  pushl %edx\n"
   "\n"
   "  pushl $.AFL_SHM_ID\n"
   "  call  getenv\n"
@@ -158,9 +183,10 @@ static const u8* main_payload =
   "  /* Store the address of the SHM region. */\n"
   "\n"
   "  movl %eax, __afl_area_ptr\n"
+  "  movl %eax, %edx\n"
   "\n"
-  "  popl %edx\n"
   "  popl %ecx\n"
+  "  popl %eax\n"
   "\n"
   "__afl_forkserver:\n"
   "\n"
@@ -171,13 +197,17 @@ static const u8* main_payload =
   "  pushl %edx\n"
   "\n"
   "  /* Phone home and tell the parent that we're OK. (Note that signals with\n"
-  "     no SA_RESTART will mess it up). */\n"
+  "     no SA_RESTART will mess it up). If this fails, assume that the fd is\n"
+  "     closed because we were execve()d from an instrumented binary. */\n"
   "\n"
   "  pushl $4          /* length    */\n"
   "  pushl $__afl_temp /* data      */\n"
   "  pushl $" STRINGIFY(FORKSRV_FD + 1) "  /* file desc */\n"
   "  call  write\n"
   "  addl  $12, %esp\n"
+  "\n"
+  "  cmpl  $4, %eax\n"
+  "  jne   __afl_fork_resume\n"
   "\n"
   "__afl_fork_wait_loop:\n"
   "\n"
@@ -260,8 +290,8 @@ static const u8* main_payload =
   "     shmget() / shmat() over and over again. */\n"
   "\n"
   "  incb __afl_setup_failure\n"
-  "  popl %edx\n"
   "  popl %ecx\n"
+  "  popl %eax\n"
   "  jmp __afl_return\n"
   "\n"
   ".AFL_VARS:\n"
@@ -271,7 +301,6 @@ static const u8* main_payload =
 #ifndef COVERAGE_ONLY
   "  .comm   __afl_prev_loc, 4, 32\n"
 #endif /* !COVERAGE_ONLY */
-  "  .comm   __afl_saved_flags, 2, 32\n"
   "  .comm   __afl_fork_pid, 4, 32\n"
   "  .comm   __afl_temp, 4, 32\n"
   "\n"
@@ -292,13 +321,12 @@ static const u8* main_payload =
   "__afl_maybe_log:\n"
   "\n"
   "  lahf\n"
-  "  seto %al\n"
-  "  movw %ax, __afl_saved_flags(%rip)\n"
+  "  seto  %al\n"
   "\n"
   "  /* Check if SHM region is already mapped. */\n"
   "\n"
-  "  movq __afl_area_ptr(%rip), %rax\n"
-  "  testq %rax, %rax\n"
+  "  movq __afl_area_ptr(%rip), %rdx\n"
+  "  testq %rdx, %rdx\n"
   "  je __afl_setup\n"
   "\n"
   "__afl_store:\n"
@@ -308,19 +336,16 @@ static const u8* main_payload =
 #ifndef COVERAGE_ONLY
   "  xorq __afl_prev_loc(%rip), %rcx\n"
   "  xorq %rcx, __afl_prev_loc(%rip)\n"
-  "  xorq $" STRINGIFY(MAP_SIZE-1) ", __afl_prev_loc(%rip)\n"
 #endif /* !COVERAGE_ONLY */
-  "  addq %rcx, %rax\n"
   "\n"
 #ifdef COVERAGE_ONLY
-  "  orb  $1, (%rax)\n"
+  "  orb  $1, (%rdx, %rcx, 1)\n"
 #else
-  "  incb (%rax)\n"
+  "  incb (%rdx, %rcx, 1)\n"
 #endif /* ^COVERAGE_ONLY */
   "\n"
   "__afl_return:\n"
   "\n"
-  "  movw __afl_saved_flags(%rip), %ax\n"
   "  addb $127, %al\n"
   "  sahf\n"
   "  ret\n"
@@ -336,15 +361,15 @@ static const u8* main_payload =
   "\n"
   "  /* Map SHM, jumping to __afl_setup_abort if something goes wrong. */\n"
   "\n"
+  "  pushq %rax\n"
   "  pushq %rcx\n"
-  "  pushq %rdx\n"
   "  pushq %rdi\n"
   "  pushq %rsi\n"
   "\n"
   "  leaq .AFL_SHM_ID(%rip), %rdi\n"
   "  call getenv@PLT\n"
   "\n"
-  "  cmpq $-1, %rax\n"
+  "  testq %rax, %rax\n"
   "  je    __afl_setup_abort\n"
   "\n"
   "  movq  %rax, %rdi\n"
@@ -355,20 +380,18 @@ static const u8* main_payload =
   "  movq %rax, %rdi   /* SHM ID         */\n"
   "  call shmat@PLT\n"
   "\n"
-  "  testq %rax, %rax\n"
-  "  je __afl_setup_abort\n"
+  "  cmpq $-1, %rax\n"
+  "  je   __afl_setup_abort\n"
   "\n"
   "  /* Store the address of the SHM region. */\n"
   "\n"
+  "  movq %rax, %rdx\n"
   "  movq %rax, __afl_area_ptr(%rip)\n"
   "\n"
   "  popq %rsi\n"
   "  popq %rdi\n"
-  "  popq %rdx\n"
   "  popq %rcx\n"
-
-/* FIXME_START */
-
+  "  popq %rax\n"
   "\n"
   "__afl_forkserver:\n"
   "\n"
@@ -381,12 +404,16 @@ static const u8* main_payload =
   "  pushq %rsi\n"
   "\n"
   "  /* Phone home and tell the parent that we're OK. (Note that signals with\n"
-  "     no SA_RESTART will mess it up). */\n"
+  "     no SA_RESTART will mess it up). If this fails, assume that the fd is\n"
+  "     closed because we were execve()d from an instrumented binary. */\n"
   "\n"
   "  movq $4, %rdx               /* length    */\n"
   "  leaq __afl_temp(%rip), %rsi /* data      */\n"
   "  movq $" STRINGIFY(FORKSRV_FD + 1) ", %rdi       /* file desc */\n"
   "  call write@PLT\n"
+  "\n"
+  "  cmpq $4, %rax\n"
+  "  jne  __afl_fork_resume\n"
   "\n"
   "__afl_fork_wait_loop:\n"
   "\n"
@@ -411,7 +438,7 @@ static const u8* main_payload =
   "\n"
   "  /* In parent process: write PID to pipe, then wait for child. */\n"
   "\n"
-  "  movl %eax, __afl_fork_pid\n"
+  "  movl %eax, __afl_fork_pid(%rip)\n"
   "\n"
   "  movq $4, %rdx                   /* length    */\n"
   "  leaq __afl_fork_pid(%rip), %rsi /* data      */\n"
@@ -464,8 +491,8 @@ static const u8* main_payload =
   "  incb __afl_setup_failure(%rip)\n"
   "  popq %rsi\n"
   "  popq %rdi\n"
-  "  popq %rdx\n"
   "  popq %rcx\n"
+  "  popq %rax\n"
   "  jmp __afl_return\n"
   "\n"
   ".AFL_VARS:\n"
@@ -475,7 +502,6 @@ static const u8* main_payload =
 #ifndef COVERAGE_ONLY
   "  .comm   __afl_prev_loc, 8, 32\n"
 #endif /* !COVERAGE_ONLY */
-  "  .comm   __afl_saved_flags, 2, 32\n"
   "  .comm   __afl_fork_pid, 4, 32\n"
   "  .comm   __afl_temp, 4, 32\n"
   "\n"

@@ -71,7 +71,7 @@ for c in $DIR/*; do
 
   B=`basename -- "$c"`
 
-  AFL_SINK_OUTPUT=1 "$SM" "$BIN" <"$c" 2>/dev/null | grep -E '^[0-9]{5}/[0-7]$' >".traces/$B"
+  AFL_SINK_OUTPUT=1 "$SM" "$BIN" <"$c" 1>&2 | grep -E '^[0-9]{5}/[0-9]{1,3}$' >".traces/$B"
 
   TC=`grep -c . ".traces/$B"`
 
