@@ -1,3 +1,8 @@
+=========================
+Tips for parallel fuzzing
+=========================
+
+  (See README for the general instruction manual)
 
 1) Introduction
 ---------------
@@ -5,6 +10,9 @@
 Every copy of afl-fuzz will take up one full CPU core. This means that on an
 n-core system, you can safely run up to n different fuzzing jobs with virtually
 no performance hit.
+
+In fact, depending on the design of the fuzzed program, you may be able run one
+fuzzer per every virtual core on HT-enabled system at very little cost.
 
 When targeting multiple unrelated binaries, it is perfectly fine to run fully
 separate instances of afl-fuzz - be it on a single machine or across a large
@@ -32,8 +40,12 @@ This syntax will cause the fuzzer to write its output to a directory called:
 
 In this setup, each instance will periodically rescan all entries in
 /path/to/sync_dir to find outputs discovered by other jobs and use them if they
-result in any locally new coverage. Note that -S also implies -d and makes the
-fuzzer proceed straight to non-deterministic tweaks.
+result in any locally new coverage.
+
+Note that -S also implies -d and makes the fuzzer proceed straight to
+non-deterministic tweaks. You probably want to run one (and just one) of the
+instances with the -D parameter to keep the deterministic checks. Enabling
+this one more than one instance would be a waste of CPU time.
 
 Of course, it is important to assign every fuzzer a different ID. Care should
 be exercised when using the -f option, too: two processes competing to write
@@ -50,11 +62,21 @@ script that performs two actions:
     a tar archive of the /path/to/sync_dir/<fuzzer_id>/queue/ directories for
     every <fuzzer_id> local to the machine, e.g.:
 
-    ssh user@host7 'tar -czf - sync/host7_id1/queue sync/host7_id2/queue' >host7.tgz
+    for s in {1..10}; do
+      ssh user@host${s} "tar -czf - sync/host${s}_fuzzid*/queue" >host${s}.tgz
+    done
 
   - Distributes and unpacks these files on all the remaining machines, e.g.:
 
-    ssh user@host8 'tar -kxzf -' <host7.tgz
+    for s in {1..10}; do
+      for d in {1..10}; do
+        test "$s" = "$d" && continue
+        ssh user@host${d} 'tar -kxzf -' <host${s}.tgz
+      done
+    done
+
+    For large fleets, you'd want to consolidate tarballs for each host to
+    minimize the number of connections needed.
 
 There is an example of such a script in experimental/distributed_fuzzing/.
 
@@ -72,6 +94,10 @@ When developing custom code, there are several optimizations to keep in mind:
   - There is no need to fetch directories for fuzzers that are not running
     locally on a particular machine, and were simply copied over to that
     system during earlier runs.
+
+It is *not* advisable to skip the synchronization script and run the fuzzers
+directly on a network filesystem; unexpected latency and unkillable I/O
+wait processes can mess things up.
 
 4) Closing remarks
 ------------------
@@ -92,12 +118,6 @@ It is perhaps worth noting that all of the following is permitted:
     different starting test cases (e.g., progressive and standard JPEG).
     The synchronization mechanism ensures that the test sets will get
     fairly homogenous over time, but it introduces some initial variability.
-
-In some situations, you can also designate one fuzzer to still perform
-deterministic fuzzing of all the incoming and internally discovered test
-cases. This can be achieved by specifying -D in the command line. Use this
-setting sparingly: multiple fuzzers performing the same deterministic checks
-on the same file is a waste of CPU time.
 
 Oh, one more thing: on the status screen of every fuzzer, you can keep track
 of the number of paths imported from other instances. The figure replaces the

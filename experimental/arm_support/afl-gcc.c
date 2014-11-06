@@ -24,6 +24,8 @@
    hardening options that may help detect memory management issues more
    reliably. Depending on config.h, this may include enabling ASAN.
 
+   *** EXPERIMENTAL ARM VERSION ***
+
  */
 
 #define AFL_MAIN
@@ -41,7 +43,6 @@
 static u8*  as_path;                /* Path to the AFL 'as' wrapper      */
 static u8** gcc_params;             /* Parameters passed to the real GCC */
 static u32  gcc_par_cnt = 1;        /* Param count, including argv0      */
-static u8   be_quiet;               /* Quiet mode                        */
 
 
 /* Try to find our "fake" GNU assembler in AFL_PATH or at the location derived
@@ -106,7 +107,7 @@ static void edit_params(u32 argc, char** argv) {
   u8 fortify_set = 0;
   u8 *name;
 
-  gcc_params = ck_alloc((argc + 12) * sizeof(u8*));
+  gcc_params = ck_alloc((argc + 9) * sizeof(u8*));
 
   name = strrchr(argv[0], '/');
   if (!name) name = argv[0]; else name++;
@@ -121,30 +122,17 @@ static void edit_params(u32 argc, char** argv) {
 
     if (!strncmp(cur, "-B", 2)) {
 
-      if (!be_quiet) WARNF("-B is already set, overriding");
+      WARNF("-B is already set, overriding");
 
       if (!cur[2] && argc) { argc--; argv++; }
       continue;
 
     }
 
-#ifndef USE_64BIT
-
-    if (!strcmp(cur, "-m64")) {
-      if (!be_quiet)
-        WARNF("64-bit compilation attempted, overriding (USE_64BIT not set)");
+    if (!strcmp(cur, "-mthumb")) {
+      WARNF("Thumb-mode compilation attempted, overriding");
       continue;
     }
-
-#else
-
-    if (!strcmp(cur, "-m32")) {
-      if (!be_quiet)
-        WARNF("32-bit compilation attempted, overriding (USE_64BIT set)");
-      continue;
-    }
-
-#endif /* ^!USE_64BIT */
 
     if (!strcmp(cur, "-pipe")) continue;
 
@@ -157,12 +145,7 @@ static void edit_params(u32 argc, char** argv) {
   gcc_params[gcc_par_cnt++] = "-B";
   gcc_params[gcc_par_cnt++] = as_path;
   gcc_params[gcc_par_cnt++] = "-g";
-
-#ifndef USE_64BIT
-  gcc_params[gcc_par_cnt++] = "-m32";
-#else
-  gcc_params[gcc_par_cnt++] = "-m64";
-#endif /* ^!USE_64BIT */
+  gcc_params[gcc_par_cnt++] = "-marm";
 
   if (getenv("AFL_HARDEN")) {
 
@@ -170,6 +153,7 @@ static void edit_params(u32 argc, char** argv) {
 
 #ifdef USE_ASAN
     gcc_params[gcc_par_cnt++] = "-fsanitize=address";
+    gcc_params[gcc_par_cnt++] = "-fsanitize=memory";
 #endif /* USE_ASAN */
 
     if (!fortify_set)
@@ -186,16 +170,8 @@ static void edit_params(u32 argc, char** argv) {
 
 int main(int argc, char** argv) {
 
-  /* The as_nl part is a crude check from being called from within ./configure.
-     Some sketchy ./configure checks can fail if the compiler outputs anything
-     to stderr, even if the compilation succeeds and return code is 0. Yuck. */
-
-  if (!getenv("AFL_QUIET") && !getenv("as_nl")) {
-
-    SAYF(cCYA "afl-gcc " cBRI VERSION cNOR " (" __DATE__ " " __TIME__
+  SAYF(cCYA "afl-gcc " cBRI VERSION cNOR " (" __DATE__ " " __TIME__
          ") by <lcamtuf@google.com>\n");
-
-  } else be_quiet = 1;
 
   if (argc < 2) {
 

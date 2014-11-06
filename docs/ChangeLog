@@ -1,4 +1,32 @@
 --------------
+Version 0.43b:
+--------------
+
+  - Fix for 64-bit gcc -shared reloc bug.
+
+  - echo -e removed from Makefile for compatibility with dash (reported by jwilk).
+
+  - Added status_screen.txt.
+
+  - Added canvas_harness.
+
+--------------
+Version 0.42b:
+--------------
+
+  - Red zone fix for 64-bit (oops!).
+
+  - Horribly experimental ARM support in experimental/arm_support.
+
+  - Several improvements to error messages.
+
+  - Added AFL_QUIET to silence afl-gcc and afl-as when using wonky build
+    systems.
+
+  - Improved check for 64-bit compilation, plus several sanity checks
+    in Makefile.
+
+--------------
 Version 0.41b:
 --------------
 
@@ -12,7 +40,9 @@ Version 0.41b:
 
   - Visual indication of the number of imported paths.
 
-  - Fix to afl-showmap.
+  - Fix to afl-showmap to make it work well with new instrumentation.
+
+  - Much better messages for crashes early on.
 
 --------------
 Version 0.40b:

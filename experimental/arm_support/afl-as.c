@@ -17,8 +17,7 @@
    automatically invoked by the toolchain when compiling programs using
    afl-gcc.
 
-   The current implementation requires debug-enabled (-g) input. The injected
-   code is designed for 32-bit x86 C/C++ programs, although porting is trivial.
+   *** EXPERIMENTAL ARM VERSION ***
 
  */
 
@@ -48,7 +47,6 @@ static u8*  modified_file;      /* Instrumented file for the real 'as'  */
 
 static u32  rand_seed;          /* Random seed used for instrumentation */
 
-static u8   be_quiet;           /* Quiet mode (no stderr output)        */
 
 /* Examine and modify parameters to pass to 'as'. Note that the file name
    is always the last parameter passed by GCC, so we exploit this property
@@ -57,7 +55,6 @@ static u8   be_quiet;           /* Quiet mode (no stderr output)        */
 static void edit_params(int argc, char** argv) {
 
   u8* tmp_dir = getenv("TMPDIR");
-  u32 i;
 
   if (!tmp_dir) tmp_dir = "/tmp";
 
@@ -67,22 +64,6 @@ static void edit_params(int argc, char** argv) {
 
   as_params[0] = "as";
   as_params[argc] = 0;
-
-  for (i = 1; i < argc; i++) {
-
-#ifndef USE_64BIT
-
-    if (!strcmp(as_params[i], "--64"))
-      FATAL("64-bit compilation requires afl to be compiled with USE_64BIT set");
-
-#else
-
-    if (!strcmp(as_params[i], "--32"))
-      FATAL("32-bit compilation requires afl to be compiled without USE_64BIT");
-
-#endif /* ^!USE_64BIT */
-
-  }
 
   input_file = as_params[argc - 1];
 
@@ -113,6 +94,7 @@ static void add_instrumentation(void) {
   s32 outfd;
   u32 ins_lines = 0;
   u8  now_instr = 0;
+  u8  output_next = 0;
 
   if (input_file) {
 
@@ -127,9 +109,80 @@ static void add_instrumentation(void) {
 
   outf = fdopen(outfd, "w");
 
-  if (!outf) PFATAL("fdopen() failed");  
+  if (!outf) PFATAL("fdopen() failed");
 
   while (fgets(line, MAX_AS_LINE, inf)) {
+
+    u8* label;
+
+    /* Oh boy. The ARM version is extremely messy compared to Intel,
+       because of the very limited range of immediate pointers within
+       opcodes. When we inject the instrumentation, it's possible to
+       push some labels / literal pools outside the range they were
+       in when GCC first generated the code. This means several things:
+
+       - We need to rewrite instructions such as ldr to movw + movt +
+         ldr.
+
+       - We need to do a similar but different hack for fld* / fst*.
+
+       - We need to inject additional .ltorg sections and jump over
+         them to ensure sufficient density of literal pools.
+
+       - We need to be careful to not accidentally instrument .word
+         literals that appear in the code segment.
+
+       Whoever complains that x86 assembly is counterintuitive and ARM
+       is user-friendly is probably at least a bit high.
+
+     */
+
+    /* Output instrumentation unless we're hitting a block of .word
+       literals. */
+
+    if (output_next) {
+
+      if (strncmp(line, "\t.word", 6)) {
+        fprintf(outf, trampoline_fmt, R(MAP_SIZE));
+        ins_lines++;
+      }
+
+      output_next = 0;
+
+    }
+
+    /* Rewrite label-referencing ldr instructions. */
+
+    if (now_instr && !strncmp(line, "\tldr", 4) && 
+        (label = strstr(line, ", .L"))) {
+
+      u8* reg = strchr(line + 4, '\t');
+
+      label[0] = 0;
+
+      fprintf(outf, "%s, =%s\n", line, label + 2);
+      fprintf(outf, "%s, [%s]\n", line, reg);
+
+      continue;
+
+    }
+
+    /* Do not-exactly-the-same for fld* and fst*. */
+
+    if (now_instr &&
+        (!strncmp(line, "\tfld", 4) || !strncmp(line, "\tfst", 4)) &&
+        (label = strstr(line, ", .L"))) {
+
+      label[0] = 0;
+
+      fprintf(outf, "push {r12}\n");
+      fprintf(outf, "ldr r12, =%s\n", label + 2);
+      fprintf(outf, "%s, [r12]\n", line);
+      fprintf(outf, "pop {r12}\n");
+
+      continue;
+
+    }
 
     fputs(line, outf);
 
@@ -153,27 +206,16 @@ static void add_instrumentation(void) {
     }
 
     /* If we're in the right mood for instrumenting, check for function
-       names or conditional labels. */
+       names or conditional labels, decide what to do next. */
 
     if (now_instr && (
         (strstr(line, ":\n") && (line[0] == '.' ? isdigit(line[2]) : 1)) ||
-        (line[0] == '\t' && line[1] == 'j' && line[2] != 'm'))) {
+        (line[0] == '\t' && line[1] == 'b' && line[2] == 'e'))) {
 
-      /* Every function name and conditional label is given a random ID.
-         This ID, XORed with the ID of the previously executed one, is used
-         to selected a byte in the execution bitmap that is updated by the
-         runtime instrumentation.
-
-         All of this forms an almost-unique identifier of a particular state
-         transition in program's control flow.
-
-         If COVERAGE_ONLY is set, the instrumentation will use the current
-         location only, and skip the XOR part. */
-
-      fprintf(outf, trampoline_fmt, R(MAP_SIZE));
-      ins_lines++;
+      output_next = 1;
 
     }
+
 
   }
 
@@ -182,13 +224,9 @@ static void add_instrumentation(void) {
   if (input_file) fclose(inf);
   fclose(outf);
 
-  if (!be_quiet) {
-
-    if (!ins_lines) WARNF("No instrumentation targets found.");
-    else OKF("Successfully instrumented %u locations (seed = 0x%08x).",
-             ins_lines, rand_seed);
- 
-  }
+  if (!ins_lines) WARNF("No instrumentation targets found.");
+  else OKF("Successfully instrumented %u locations (seed = 0x%08x).",
+           ins_lines, rand_seed);
 
 }
 
@@ -203,12 +241,8 @@ int main(int argc, char** argv) {
   struct timeval tv;
   struct timezone tz;
 
-  if (!getenv("AFL_QUIET") && !getenv("as_nl")) {
-
-    SAYF(cCYA "afl-as " cBRI VERSION cNOR " (" __DATE__ " " __TIME__ 
-         ") by <lcamtuf@google.com>\n");
- 
-  } else be_quiet = 1;
+  SAYF(cCYA "afl-as " cBRI VERSION cNOR " (" __DATE__ " " __TIME__ 
+       ") by <lcamtuf@google.com>\n");
 
   if (argc < 2) {
 
@@ -242,7 +276,7 @@ int main(int argc, char** argv) {
 
   if (waitpid(pid, &status, 0) <= 0) PFATAL("waitpid() failed");
 
-  unlink(modified_file);
+//  unlink(modified_file);
 
   exit(WEXITSTATUS(status));
 

@@ -40,7 +40,6 @@
 #include <sys/shm.h>
 #include <sys/stat.h>
 #include <sys/types.h>
-#include <arpa/inet.h>
 
 static s32 forksrv_pid,               /* PID of the fork server           */
            child_pid;                 /* PID of the fuzzed program        */

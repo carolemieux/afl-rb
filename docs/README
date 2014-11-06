@@ -26,16 +26,15 @@ These techniques can be divided into three broad groups:
 
   - Simple coverage maximization. This approach boils down to trying to isolate
     initial test cases that offer diverse code coverage in the targeted
-    application - and them fuzzing them using conventional techniques.
+    application - and then fuzzing them using conventional techniques.
 
-  - Control flow analysis. A more sophisticated technique that leverages
+  - Dynamic control flow analysis. A more sophisticated technique that leverages
     instrumented binaries to focus the fuzzing efforts on mutations that
-    generate distinctive sequences of conditional branches within the
-    instrumented binary.
+    produce noteworthy internal states within the instrumented binary.
 
-  - Static analysis. An approach that attempts to reason about potentially
-    interesting states within the tested program and then make educated guesses
-    about the input values that could possibly trigger them.
+  - Static analysis / symbolic execution. An approach that attempts to reason
+    about potentially interesting states within the tested program and then make
+    educated guesses about the input values that could possibly trigger them.
 
 The first technique is surprisingly powerful when used to pre-select initial test
 cases from a massive corpus of valid data - say, the result of a large-scale web
@@ -54,12 +53,13 @@ traditional one.
 2) About AFL
 ------------
 
-American Fuzzy Lop uses edge coverage to detect subtle, local-scale changes to
-program control flow without having to perform a complex comparisons between
-series of distinctive traces (a common failure point for other tools).
+American Fuzzy Lop uses edge coverage to rapidly detect subtle, local-scale
+changes to program control flow without having to perform a complex comparisons
+between series of distinctive traces (a common failure point for other tools).
 
-In almost-plain English, the fuzzer does this by instrumenting the code to record
-tuples in the following format:
+In almost-plain English, the fuzzer does this by augmenting the tested code with
+very lightweight, assembly-level instrumentation that records tuples in the
+following format:
 
   <ID of current code location>, <ID of previously-executed code location>
 
@@ -72,7 +72,7 @@ The instrumentation is used as a part of a simple queue-based algorithm:
 
   1) Load user-supplied initial test cases into the queue,
 
-  2) Take input file from the queue,
+  2) Take next input file from the queue,
 
   3) Repeatedly mutate the file using a balanced variety of traditional fuzzing
      strategies,
@@ -80,20 +80,21 @@ The instrumentation is used as a part of a simple queue-based algorithm:
   4) If any of the generated mutations resulted in a new tuple being recorded
      by the instrumentation, add mutated output as a new entry in the queue.
 
-  5) If queue not empty, go to 2.
+  5) Go to 2.
 
 The discovered test cases are also periodically culled to eliminate ones that
 have been made obsolete by more inclusive finds discovered later in the
-fuzzing process. Because of this, the fuzzer is useful not only for
-identifying crashes, but is exceptionally effective at turning a single valid
-input file into a reasonably-sized corpus of interesting test cases that can
-be manually investigated for non-crashing problems, or used to stress-test
-applications that are harder to instrument or too slow to fuzz efficiently.
-In particular, it can be extremely useful for generating small test sets that
-may be programatically or manually examined for anomalies in a browser environment.
+fuzzing process.
 
-In real-world testing with libraries such as libjpeg, libpng, libtiff, or
-giflib, the fuzzer requires no fine-tuning, and significantly outperforms
+Because of its ability to automatically construct a small corpus of interesting
+test cases, the fuzzer is useful not just for direct fuzzing, but also for
+seeding other, more labor- or resource-intensive testing regimes. In particular,
+it's great for generating test cases that can be manually examined for
+anomalies in the browser environment; in "heavy" applications such as Adobe
+Photoshop or Microsoft Office; or under Valgrind.
+
+In real-world testing with libraries such as libjpeg, libpng, libtiff, libbfd,
+or libbz2, the fuzzer requires no fine-tuning, and significantly outperforms
 blind fuzzing or coverage-only tools. Using a common set of strategies against
 libjpeg, the tool toggles twice as many branches as non-instrumented fuzzing
 (IGNORE_FINDS in config.h) and identifies several times as many distinctive
@@ -112,24 +113,27 @@ can be fuzzed as fast or even faster than possible with traditional tools.
 
 The injected probes are designed to work with C and C++ code compiled on 32-bit
 x86 platforms. You can edit config.h and uncomment USE_64BIT to switch to
-64-bit instrumentation. Porting to other platforms should not be difficult.
+64-bit instrumentation. Porting to other platforms should not be difficult;
+in fact, there is an early-stake ARM port in experimental/arm_support/.
 
 The correct way to recompile the target program will vary depending on the
 specifics of the build process, but a common approach may be:
 
-$ export AFL_PATH=/path/to/afl/
-$ CC=$AFL_PATH/afl-gcc ./configure
+$ CC=/path/to/afl/afl-gcc ./configure
 $ make clean all
 
-For C++ programs, it may be necessary to specify CXX instead of CC. When testing
-libraries, it is essential to either link the tested executable against a static
-version of the instrumented library (./configure --disable-shared may be
-useful), or to use a proper binary (beware of shell script wrappers generated
-by the build system) with the right LD_LIBRARY_PATH.
+For C++ programs, it may be necessary to specify this instead:
+
+$ CXX=/path/to/afl/afl-g++ ./configure
+
+When testing libraries, it is essential to either link the tested executable
+against a static version of the instrumented library (./configure
+--disable-shared may be useful), or to use a proper binary (beware of shell
+script wrappers generated by the build system) with the right LD_LIBRARY_PATH.
 
 Setting AFL_HARDEN in the environment will cause afl-gcc to automatically enable
 several GCC hardening features that may make it easier to detect memory bugs;
-with GCC 4.8 and above, this includes ASAN / MSAN.
+with GCC 4.8 and above, this includes ASAN.
 
 4) Choosing initial test cases
 ------------------------------
@@ -175,9 +179,8 @@ executed process, although this is seldom necessary.
 The fuzzing process itself is relatively simple. It consists of several types
 of sequential, deterministic operations (bitflips, injection of interesting
 integers) followed by a "havoc" stage with multiple stacked, random
-modifications - block deletion, cloning, random bitflips, etc.
-
-The deterministic stage takes time proportional to the size of the input file;
+modifications - block deletion, cloning, random bitflips, etc. The
+deterministic stage takes time proportional to the size of the input file;
 once this is done, the havoc stages continue for every discovered input until
 Ctrl-C is hit.
 
@@ -264,12 +267,13 @@ Here are some of the most important caveats for AFL:
 
   - The included instrumentation (afl-as.h) currently supports 32-bit x86 code
     by default, with the option to go 64-bit by uncommenting USE_64BIT in
-    config.h.
+    config.h. If you are feeling adventurous, an experimental ARM port can be
+    found in experimental/arm_support/, too.
 
     For other CPUs, rewriting the assembly code in afl-as.h should be a very
-    simple task. Note that minor tweaks to fuzz_one() in afl-fuzz.c would be
-    necessary to accommodate architectures requiring aligned memory access,
-    though.
+    simple task. Note that minor tweaks to fuzz_one() in afl-fuzz.c may be
+    necessary to accommodate architectures that require aligned memory
+    access.
 
   - The approach is theoretically compatible with any GCC-supported language,
     but only C and C++ were confirmed to work. Objective C is very likely
@@ -278,6 +282,11 @@ Here are some of the most important caveats for AFL:
   - Instrumentation of binary-only code is theoretically possible, but not
     supported at this point. Leveraging pin or DynamoRIO may be a good
     approach.
+
+  - Some fraction of build systems may malfunction when afl-gcc or afl-as 
+    write anything to stderr, even if compilation succeeds. If you're running
+    into build issues, try setting and exporting AFL_QUIET=1 first, then run
+    'make distclean', ./configure, and 'make clean all' again.
 
 9) Contact
 ----------

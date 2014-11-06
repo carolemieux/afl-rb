@@ -37,24 +37,42 @@
 #define STRINGIFY_INTERNAL(x) #x
 #define STRINGIFY(x) STRINGIFY_INTERNAL((x))
 
-/* Some notes about making the instrumentation perform better:
+/* 
+   ------------------
+   Performances notes
+   ------------------
+
+   Contributions to make this code faster are appreciated! Here are some
+   rough notes that may help with the task:
 
    - Only the trampoline_fmt and the non-setup __afl_maybe_log code paths are
      really worth optimizing; the setup / fork server stuff matters a lot less.
 
-   - Interestingly, this code isn't a lot faster if we store a variable
-     pointer to the setup, log, or return routine and then do a register call
-     from within trampoline_fmt (it speeds up non-instrumented execution quite a
-     bit, though, since that path just becomes push-call-ret-pop).
+   - Interestingly, instrumented execution isn't a lot faster if we store a
+     variable pointer to the setup, log, or return routine and then do a reg
+     call from within trampoline_fmt. It does speed up non-instrumented
+     execution quite a bit, though, since that path just becomes
+     push-call-ret-pop.
 
    - There is also not a whole lot to be gained by doing SHM attach at a
      fixed address instead of retrieving __afl_area_ptr. There was essentially
      no measurable gain, so I didn't make that optimization to minimize the
      likelihood of problems if the hardcoded region is already mapped for
-     whatever reason.
+     whatever reason (e.g., by ASAN).
 
-   - pushf / popf is *awfully* slow, which is why we're doing the lahf /
-     sahf + overflow test trick.
+   - popf is *awfully* slow, which is why we're doing the lahf / sahf +
+     overflow test trick.
+
+   Perhaps of note: in the 64-bit version, the instrumentation is done slightly
+   differently than on 32-bit, with __afl_prev_loc and __afl_area_ptr being
+   local to the object file (.lcomm), rather than global (.comm). This is to
+   avoid GOTRELPC lookups in the critical code path, which AFAICT, are otherwise
+   unavoidable if we want gcc -shared to work; simple relocations between .bss
+   and .text won't work on 64 bit platforms in such a case.
+
+   The side effect is that state transitions are measured in a somewhat
+   different way, with previous tuple being recorded separately within the scope
+   of every .c file. This should have no real impact.
 
  */
 
@@ -88,7 +106,7 @@ static const u8* trampoline_fmt =
   "\n"
   ".align 8\n"
   "\n"
-  "leaq -24(%%rsp), %%rsp\n"
+  "leaq -(128+24)(%%rsp), %%rsp\n"
   "movq %%rdx, 0(%%rsp)\n"
   "movq %%rcx, 8(%%rsp)\n"
   "movq %%rax, 16(%%rsp)\n"
@@ -97,7 +115,7 @@ static const u8* trampoline_fmt =
   "movq 0(%%rsp), %%rdx\n"
   "movq 8(%%rsp), %%rcx\n"
   "movq 16(%%rsp), %%rax\n"
-  "leaq 24(%%rsp), %%rsp\n"
+  "leaq (128+24)(%%rsp), %%rsp\n"
   "\n"
   "/* --- END --- */\n"
   "\n";
@@ -325,9 +343,9 @@ static const u8* main_payload =
   "\n"
   "  /* Check if SHM region is already mapped. */\n"
   "\n"
-  "  movq __afl_area_ptr(%rip), %rdx\n"
+  "  movq  __afl_area_ptr(%rip), %rdx\n"
   "  testq %rdx, %rdx\n"
-  "  je __afl_setup\n"
+  "  je    __afl_setup\n"
   "\n"
   "__afl_store:\n"
   "\n"
@@ -359,6 +377,18 @@ static const u8* main_payload =
   "  cmpb $0, __afl_setup_failure(%rip)\n"
   "  jne __afl_return\n"
   "\n"
+  "  /* Check out if we have a global pointer on file. */\n"
+  "\n"
+  "  movq  __afl_global_area_ptr@GOTPCREL(%rip), %rdx\n"
+  "  movq  (%rdx), %rdx\n"
+  "  testq %rdx, %rdx\n"
+  "  je    __afl_setup_first\n"
+  "\n"
+  "  movq %rdx, __afl_area_ptr(%rip)\n"
+  "  jmp  __afl_store\n" 
+  "\n"
+  "__afl_setup_first:\n"
+  "\n"
   "  /* Map SHM, jumping to __afl_setup_abort if something goes wrong. */\n"
   "\n"
   "  pushq %rax\n"
@@ -387,6 +417,10 @@ static const u8* main_payload =
   "\n"
   "  movq %rax, %rdx\n"
   "  movq %rax, __afl_area_ptr(%rip)\n"
+  "\n"
+  "  movq __afl_global_area_ptr@GOTPCREL(%rip), %rdx\n"
+  "  movq %rax, (%rdx)\n"
+  "  movq %rax, %rdx\n"
   "\n"
   "  popq %rsi\n"
   "  popq %rdi\n"
@@ -497,13 +531,14 @@ static const u8* main_payload =
   "\n"
   ".AFL_VARS:\n"
   "\n"
-  "  .comm   __afl_area_ptr, 8, 32\n"
-  "  .comm   __afl_setup_failure, 1, 32\n"
+  "  .lcomm   __afl_area_ptr, 8\n"
+  "  .lcomm   __afl_prev_loc, 8\n"
+  "  .lcomm   __afl_fork_pid, 4\n"
+  "  .lcomm   __afl_temp, 4\n"
+  "  .lcomm   __afl_setup_failure, 1\n"
+  "  .comm    __afl_global_area_ptr, 8, 8\n"
 #ifndef COVERAGE_ONLY
-  "  .comm   __afl_prev_loc, 8, 32\n"
 #endif /* !COVERAGE_ONLY */
-  "  .comm   __afl_fork_pid, 4, 32\n"
-  "  .comm   __afl_temp, 4, 32\n"
   "\n"
   ".AFL_SHM_ID:\n"
   "  .string \"" SHM_ENV_VAR "\"\n"

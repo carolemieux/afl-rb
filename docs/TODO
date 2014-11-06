@@ -1,8 +1,10 @@
+====
+TODO
+====
+
 Here's my current wishlist for afl:
 
   - Part #2 of Jann's fork server patch.
-
-  - ARM port.
 
   - Experimental support for ASAN edge coverage, instead of a custom GCC hack.
     This is not yet shipping with clang, so not very urgent.

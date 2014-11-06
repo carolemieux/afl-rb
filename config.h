@@ -25,7 +25,7 @@
  *                                                    *
  ******************************************************/
 
-/* Uncomment this to compile afl-gcc and afl-as to compile 64-bit binaries. */
+/* Uncomment this to make afl-gcc and afl-as generate 64-bit binaries: */
 
 // #define USE_64BIT
 
@@ -33,7 +33,7 @@
 
 #define USE_COLOR
 
-/* Comment out to disable fancy boxes and use poor man's drawings: */
+/* Comment out to disable fancy ANSI boxes and use poor man's 7-bit UI: */
 
 #define FANCY_BOXES
 
@@ -43,15 +43,15 @@
 
 /* Default memory limit for child process (MB): */
 
-#define MEM_LIMIT           20
+#define MEM_LIMIT           25
 
-/* Number of calibration cycles per every new test case, and for cases
-   where variable execution paths are detected: */
+/* Number of calibration cycles per every new test case (and for test
+   cases that show variable behavior): */
 
 #define CAL_CYCLES          10
 #define CAL_CYCLES_LONG     100
 
-/* Maximum number of subsequent hangs before abandoning an input file: */
+/* Number of subsequent hangs before abandoning an input file: */
 
 #define HANG_LIMIT          250
 
@@ -64,34 +64,36 @@
 #define KEEP_UNIQUE_HANG    500
 #define KEEP_UNIQUE_CRASH   5000
 
-/* Number of random tweaks during a single 'havoc' stage: */
+/* Baseline number of random tweaks during a single 'havoc' stage: */
 
 #define HAVOC_CYCLES        5000
 
-/* Maximum multiplier for the above while new findings are being made
-   (should be a power of two, and beware of 32-bit int overflows): */
+/* Maximum multiplier for the above (should be a power of two, beware
+   of 32-bit int overflows): */
 
 #define HAVOC_MAX_MULT      16
 
-/* Maximum stacking for havoc-stage tweaks is calculated like this: 
+/* Maximum stacking for havoc-stage tweaks. The actual value is calculated
+   like this: 
 
    n = random between 0 and HAVOC_STACK_POW2
    stacking = 2^n
 
-   In other words, the default value produces 1, 2, 4, 8, 16, 32, or 64
-   stacked tweaks: */
+   In other words, the default (n = 7) produces 1, 2, 4, 8, 16, 32, 64, or
+   128 stacked tweaks: */
 
 #define HAVOC_STACK_POW2    7
 
-/* Caps on block sizes for cloning and deletion operations. These ranges
-   have an equal probability of getting picked. */
+/* Caps on block sizes for cloning and deletion operations. Each of these
+   ranges has a 33% probability of getting picked: */
 
 #define HAVOC_BLK_SMALL     32
 #define HAVOC_BLK_MEDIUM    128
 #define HAVOC_BLK_LARGE     1500
 
-/* Likelihood of using non-favored inputs within one fuzzing
-   cycle, in percent: */
+/* Likelihood of using non-favored inputs when there are pending, non-fuzzed
+   test cases (and when there is nothing new pending). This is expressed as
+   percentage: */
 
 #define SKIP_TO_NEW_PROB    99
 #define SKIP_NFAV_PROB      92
@@ -202,14 +204,14 @@
 
 #define MAX_ALLOC           0x40000000
 
-/* Uncomment this to use inferior coverage-based instrumentation. Note that
-   you need to recompile the target binary for this to have any effect! */
+/* Uncomment this to use inferior line-coverage-based instrumentation. Note
+   that you need to recompile the target binary for this to have any effect: */
 
 // #define COVERAGE_ONLY
 
-/* Uncomment this to use instrumentation data, but ignore newly discovered
-   paths. This is useful for comparing the coverage attainable using the
-   standard algorithm with that possible with dumb fuzzing. */
+/* Uncomment this to use instrumentation data to record newly discovered paths,
+   but do not use them as seeds for fuzzing. This is useful for conveniently
+   measuring coverage that could be attaine by a "dumb" fuzzing algorithm: */
 
 // #define IGNORE_FINDS
 
