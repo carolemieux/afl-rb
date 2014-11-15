@@ -1,4 +1,65 @@
 --------------
+Version 0.47b:
+--------------
+
+  - Another minor fix for parallel builds of afl.
+
+  - Support for suffixes for -m.
+
+  - Documentation updates, notes_for_asan.txt.
+
+  - Move to http://lcamtuf.coredump.cx/afl/.
+
+--------------
+Version 0.46b:
+--------------
+
+  - Makefile dependencies cleaned up for parallel builds.
+
+  - Support for DESTDIR in Makefile.
+
+  - Removed all the USE_64BIT stuff, just auto-detect compilation mode.
+
+  - Fix for rare problems with code with manually written assembly that
+    switches between .code32 and .code64.
+
+--------------
+Version 0.45b:
+--------------
+
+  - Test case trimmer. Results in 20-30% size reduction for many types of work
+    loads, with very pronounced improvements in path discovery speeds.
+
+  - Better warning for input directories.
+
+  - Test and warning for older copies.
+
+  - Added fuzzer_stats file for status monitoring.
+
+  - Typo fixes, thanks to Alexander Cherepanov.
+
+  - Better warnings about ASAN memory requirements.
+
+  - Saner support for non-tty stdout (less output generated).
+
+--------------
+Version 0.44b:
+--------------
+
+  - Support for AFL_CC and AFL_CXX (thanks to Ben Laurie).
+
+  - Option combination -S -D replaced with -M for simplicity.
+
+  - Extra check for .section .text; lack of this prevented main() from
+    getting instrumented for some users.
+
+  - Reorganization of the testcases/ directory.
+
+  - An extra check to confirm that the build is operational.
+
+  - Consistent use of color reset codes, as suggested by Oliver Kunz.
+
+--------------
 Version 0.43b:
 --------------
 
@@ -9,6 +70,8 @@ Version 0.43b:
   - Added status_screen.txt.
 
   - Added canvas_harness.
+
+  - Minor change to the GCC check.
 
 --------------
 Version 0.42b:

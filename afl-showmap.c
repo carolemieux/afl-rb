@@ -12,9 +12,13 @@
 
      http://www.apache.org/licenses/LICENSE-2.0
 
-   This is the real deal: the program takes an instrumented binary and
-   attempts a variety of basic fuzzing tricks, paying close attention to
-   how they affect the execution path.
+   A very simple tool that runs the targeted binary and displays
+   the contents of the trace bitmap in a human-readable form. Useful in
+   scripts to eliminate redundant inputs and perform other checks.
+
+   If AFL_SINK_OUTPUT is set, output from the traced program will be
+   redirected to /dev/null. AFL_QUIET inhibits all non-fatal messages,
+   too.
 
  */
 
@@ -41,15 +45,15 @@
 #include <sys/stat.h>
 #include <sys/types.h>
 
-static s32 forksrv_pid,               /* PID of the fork server           */
-           child_pid;                 /* PID of the fuzzed program        */
+static s32 forksrv_pid,               /* PID of the fork server            */
+           child_pid;                 /* PID of the fuzzed program         */
 
-static u8* trace_bits;                /* SHM with instrumentation bitmap  */
+static u8* trace_bits;                /* SHM with instrumentation bitmap   */
 
-static s32 shm_id;                    /* ID of the SHM region             */
+static s32 shm_id;                    /* ID of the SHM region              */
 
-static u8  sink_output;               /* Sink program output              */
-
+static u8  sink_output,               /* Sink program output               */
+           be_quiet;                  /* Quiet mode (tuples & errors only) */
 
 /* Classify tuple counts. */
 
@@ -236,8 +240,12 @@ static void usage(u8* argv0) {
 
 int main(int argc, char** argv) {
 
-  SAYF(cCYA "afl-showmap " cBRI VERSION cNOR " (" __DATE__ " " __TIME__ 
-       ") by <lcamtuf@google.com>\n");
+  if (!getenv("AFL_QUIET")) {
+
+    SAYF(cCYA "afl-showmap " cBRI VERSION cRST " (" __DATE__ " " __TIME__ 
+         ") by <lcamtuf@google.com>\n");
+
+  } else be_quiet = 1;
 
   if (argc < 2) usage(argv[0]);
 
@@ -245,17 +253,17 @@ int main(int argc, char** argv) {
 
   if (getenv("AFL_SINK_OUTPUT")) sink_output = 1;
 
-  if (!sink_output)
+  if (!be_quiet && !sink_output)
     SAYF("\n-- Program output begins --\n");  
 
   run_target(argv + 1);
 
-  if (!sink_output)
+  if (!be_quiet && !sink_output)
     SAYF("-- Program output ends --\n");  
 
   if (!count_bits()) FATAL("No instrumentation data found");
 
-  SAYF(cBRI "\nTuples recorded:\n\n" cRST);
+  if (!be_quiet) SAYF(cBRI "\nTuples recorded:\n\n" cRST);
 
   show_tuples();
 

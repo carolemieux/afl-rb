@@ -1,14 +1,27 @@
 <html>
 <!--
 
+  american fuzzy lop - <canvas> harness
+  -------------------------------------
+ 
+  Written and maintained by Michal Zalewski <lcamtuf@google.com>
+ 
+  Copyright 2013, 2014 Google Inc. All rights reserved.
+ 
+  Licensed under the Apache License, Version 2.0 (the "License");
+  you may not use this file except in compliance with the License.
+  You may obtain a copy of the License at:
+ 
+    http://www.apache.org/licenses/LICENSE-2.0
+ 
   A simple harness for going through afl-generated test cases, rendering them in
-  the browser environment, and discovering the use of uninitialized memory. This
-  code led to the discovery of a large number of library and browser security
-  bugs.
+  the browser environment, and discovering the use of uninitialized memory and
+  similar bugs. This code led to the discovery of a fair number of library and
+  browser security bugs!
 
-  To work properly, the url_list[] variable needs to be initialized with a list
-  of relative, web-reachable paths to individual test cases. This can be done
-  manually or with a simple script.
+  The url_list[] array is a placeholder; for this to work properly, it needs to
+  be initialized with web-reachable paths to individual test cases. This can
+  be done manually or with a simple script.
 
 -->
 

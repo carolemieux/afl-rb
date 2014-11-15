@@ -57,8 +57,7 @@ while :; do
 
   done
 
-  # Distribute data. For large fleets, this could be optimized by constructing
-  # host-specific tarballs instead of establihing a bunch of separate sessions.
+  # Distribute data. For large fleets, see tips in the docs/ directory.
 
   for dst_host in $FUZZ_HOSTS; do
 

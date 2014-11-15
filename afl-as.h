@@ -23,7 +23,7 @@
    with USE_64BIT.
 
    In principle, similar code should be easy to inject into any well-behaved
-   binary-only code (e.g., using DynamoRIO). Calls and jumps offer natural
+   binary-only code (e.g., using DynamoRIO). Conditional jumps offer natural
    targets for instrumentation, and should offer comparable probe density.
 
  */
@@ -76,9 +76,7 @@
 
  */
 
-static const u8* trampoline_fmt =
-
-#ifndef USE_64BIT
+static const u8* trampoline_fmt_32 =
 
   "\n"
   "/* --- AFL TRAMPOLINE (32-BIT) --- */\n"
@@ -99,7 +97,7 @@ static const u8* trampoline_fmt =
   "/* --- END --- */\n"
   "\n";
 
-#else /* USE_64BIT */
+static const u8* trampoline_fmt_64 =
 
   "\n"
   "/* --- AFL TRAMPOLINE (64-BIT) --- */\n"
@@ -120,16 +118,13 @@ static const u8* trampoline_fmt =
   "/* --- END --- */\n"
   "\n";
 
-#endif /* ^!USE_64BIT */
-
-static const u8* main_payload = 
-
-#ifndef USE_64BIT
+static const u8* main_payload_32 = 
 
   "\n"
   "/* --- AFL MAIN PAYLOAD (32-BIT) --- */\n"
   "\n"
   ".text\n"
+  ".code32\n"
   ".align 8\n"
   "\n"
   "__afl_maybe_log:\n"
@@ -328,12 +323,13 @@ static const u8* main_payload =
   "/* --- END --- */\n"
   "\n";
 
-#else /* USE_64BIT */
+static const u8* main_payload_64 = 
 
   "\n"
   "/* --- AFL MAIN PAYLOAD (64-BIT) --- */\n"
   "\n"
   ".text\n"
+  ".code64\n"
   ".align 8\n"
   "\n"
   "__afl_maybe_log:\n"
@@ -545,7 +541,5 @@ static const u8* main_payload =
   "\n"
   "/* --- END --- */\n"
   "\n";
-
-#endif /* ^!USE_64BIT */
 
 #endif /* !_HAVE_AFL_AS_H */

@@ -115,46 +115,46 @@
 #endif /* ^MESSAGES_TO_STDOUT */
 
 #define WARNF(x...) do { \
-    SAYF(cYEL "[!] " cBRI "WARNING: " cNOR x); \
+    SAYF(cYEL "[!] " cBRI "WARNING: " cRST x); \
     SAYF(cRST "\n"); \
   } while (0)
 
 #define OKF(x...) do { \
-    SAYF(cLGN "[+] " cNOR x); \
+    SAYF(cLGN "[+] " cRST x); \
     SAYF(cRST "\n"); \
   } while (0)
 
 #define ACTF(x...) do { \
-    SAYF(cLBL "[*] " cNOR x); \
+    SAYF(cLBL "[*] " cRST x); \
     SAYF(cRST "\n"); \
   } while (0)
 
 #define BADF(x...) do { \
-    SAYF(cLRD "\n[-] " cNOR x); \
+    SAYF(cLRD "\n[-] " cRST x); \
     SAYF(cRST "\n"); \
   } while (0)
 
 #define FATAL(x...) do { \
     SAYF(cLRD "\n[-] PROGRAM ABORT : " cBRI x); \
-    SAYF(cLRD "\n         Location : " cNOR "%s(), %s:%u\n\n" cRST, \
+    SAYF(cLRD "\n         Location : " cRST "%s(), %s:%u\n\n", \
          __FUNCTION__, __FILE__, __LINE__); \
     exit(1); \
   } while (0)
 
 #define ABORT(x...) do { \
     SAYF(cLRD "\n[-] PROGRAM ABORT : " cBRI x); \
-    SAYF(cLRD "\n    Stop location : " cNOR "%s(), %s:%u\n\n" cRST, \
+    SAYF(cLRD "\n    Stop location : " cRST "%s(), %s:%u\n\n", \
          __FUNCTION__, __FILE__, __LINE__); \
     abort(); \
   } while (0)
 
 #define PFATAL(x...) do { \
-    SAYF(cLRD "\n[-]  SYSTEM ERROR : " cBRI x); \
-    SAYF(cLRD "\n    Stop location : " cNOR "%s(), %s:%u\n", \
-         __FUNCTION__, __FILE__, __LINE__); \
     fflush(stdout); \
-    perror(cLRD "       OS message " cNOR); \
-    SAYF(cRST "\n"); \
+    SAYF(cLRD "\n[-]  SYSTEM ERROR : " cBRI x); \
+    SAYF(cLRD "\n    Stop location : " cRST "%s(), %s:%u\n", \
+         __FUNCTION__, __FILE__, __LINE__); \
+    perror(cLRD "       OS message " cRST); \
+    SAYF("\n"); \
     exit(1); \
   } while (0)
 

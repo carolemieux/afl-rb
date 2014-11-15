@@ -17,8 +17,8 @@
    automatically invoked by the toolchain when compiling programs using
    afl-gcc.
 
-   The current implementation requires debug-enabled (-g) input. The injected
-   code is designed for 32-bit x86 C/C++ programs, although porting is trivial.
+   If AFL_QUIET is set, non-essential messages will not be shown. This is
+   useful when dealing with wonky build systems.
 
  */
 
@@ -48,7 +48,9 @@ static u8*  modified_file;      /* Instrumented file for the real 'as'  */
 
 static u32  rand_seed;          /* Random seed used for instrumentation */
 
-static u8   be_quiet;           /* Quiet mode (no stderr output)        */
+static u8   be_quiet,           /* Quiet mode (no stderr output)        */
+            use_64bit;          /* Output 64-bit instrumentation        */
+
 
 /* Examine and modify parameters to pass to 'as'. Note that the file name
    is always the last parameter passed by GCC, so we exploit this property
@@ -68,21 +70,8 @@ static void edit_params(int argc, char** argv) {
   as_params[0] = "as";
   as_params[argc] = 0;
 
-  for (i = 1; i < argc; i++) {
-
-#ifndef USE_64BIT
-
-    if (!strcmp(as_params[i], "--64"))
-      FATAL("64-bit compilation requires afl to be compiled with USE_64BIT set");
-
-#else
-
-    if (!strcmp(as_params[i], "--32"))
-      FATAL("32-bit compilation requires afl to be compiled without USE_64BIT");
-
-#endif /* ^!USE_64BIT */
-
-  }
+  for (i = 1; i < argc; i++)
+    if (!strcmp(as_params[i], "--64")) use_64bit = 1;
 
   input_file = as_params[argc - 1];
 
@@ -112,7 +101,7 @@ static void add_instrumentation(void) {
   FILE* outf;
   s32 outfd;
   u32 ins_lines = 0;
-  u8  now_instr = 0;
+  u8  now_instr = 0, force_inhibit = 0;
 
   if (input_file) {
 
@@ -138,7 +127,8 @@ static void add_instrumentation(void) {
 
     if (line[0] == '\t' && line[1] == '.') {
 
-      if (!strncmp(line + 2, "text\n", 5)) {
+      if (!strncmp(line + 2, "text\n", 5) ||
+          !strncmp(line + 2, "section\t.text", 13)) {
         now_instr = 1; 
         continue; 
       }
@@ -152,10 +142,17 @@ static void add_instrumentation(void) {
 
     }
 
+    if (strstr(line, ".code")) {
+
+      if (strstr(line, ".code32")) force_inhibit = use_64bit;
+      if (strstr(line, ".code64")) force_inhibit = !use_64bit;
+
+    }
+
     /* If we're in the right mood for instrumenting, check for function
        names or conditional labels. */
 
-    if (now_instr && (
+    if (!force_inhibit && now_instr && (
         (strstr(line, ":\n") && (line[0] == '.' ? isdigit(line[2]) : 1)) ||
         (line[0] == '\t' && line[1] == 'j' && line[2] != 'm'))) {
 
@@ -170,14 +167,17 @@ static void add_instrumentation(void) {
          If COVERAGE_ONLY is set, the instrumentation will use the current
          location only, and skip the XOR part. */
 
-      fprintf(outf, trampoline_fmt, R(MAP_SIZE));
+      fprintf(outf, use_64bit ? trampoline_fmt_64 : trampoline_fmt_32,
+              R(MAP_SIZE));
+
       ins_lines++;
 
     }
 
   }
 
-  fputs(main_payload, outf);
+  if (ins_lines)
+    fputs(use_64bit ? main_payload_64 : main_payload_32, outf);
 
   if (input_file) fclose(inf);
   fclose(outf);
@@ -185,8 +185,8 @@ static void add_instrumentation(void) {
   if (!be_quiet) {
 
     if (!ins_lines) WARNF("No instrumentation targets found.");
-    else OKF("Successfully instrumented %u locations (seed = 0x%08x).",
-             ins_lines, rand_seed);
+    else OKF("Instrumented %u locations (%s-bit mode, seed 0x%08x).",
+             ins_lines, use_64bit ? "64" : "32", rand_seed);
  
   }
 
@@ -205,7 +205,7 @@ int main(int argc, char** argv) {
 
   if (!getenv("AFL_QUIET") && !getenv("as_nl")) {
 
-    SAYF(cCYA "afl-as " cBRI VERSION cNOR " (" __DATE__ " " __TIME__ 
+    SAYF(cCYA "afl-as " cBRI VERSION cRST " (" __DATE__ " " __TIME__ 
          ") by <lcamtuf@google.com>\n");
  
   } else be_quiet = 1;

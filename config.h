@@ -25,10 +25,6 @@
  *                                                    *
  ******************************************************/
 
-/* Uncomment this to make afl-gcc and afl-as generate 64-bit binaries: */
-
-// #define USE_64BIT
-
 /* Comment out to disable terminal colors: */
 
 #define USE_COLOR
@@ -43,7 +39,11 @@
 
 /* Default memory limit for child process (MB): */
 
-#define MEM_LIMIT           25
+#ifndef __x86_64__ 
+#  define MEM_LIMIT         25
+#else
+#  define MEM_LIMIT         50
+#endif /* ^!__x86_64__ */
 
 /* Number of calibration cycles per every new test case (and for test
    cases that show variable behavior): */
@@ -96,7 +96,7 @@
    percentage: */
 
 #define SKIP_TO_NEW_PROB    99
-#define SKIP_NFAV_PROB      92
+#define SKIP_NFAV_PROB      90
 
 /* Splicing cycle count: */
 
@@ -109,6 +109,13 @@
 /* Maximum value for integer addition / subtraction stages: */
 
 #define ARITH_MAX           35
+
+/* Limits for the test case trimmer. The absolute minimum chunk size; and
+   the starting and ending divisors for chopping up the input file: */
+
+#define TRIM_MIN_BYTES      4
+#define TRIM_START_STEPS    16
+#define TRIM_END_STEPS      1024
 
 /* Maximum size of input file (keep under 100MB): */
 

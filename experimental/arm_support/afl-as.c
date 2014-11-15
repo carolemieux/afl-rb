@@ -276,7 +276,7 @@ int main(int argc, char** argv) {
 
   if (waitpid(pid, &status, 0) <= 0) PFATAL("waitpid() failed");
 
-//  unlink(modified_file);
+  unlink(modified_file);
 
   exit(WEXITSTATUS(status));
 

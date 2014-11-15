@@ -57,8 +57,8 @@ static u8 *in_dir,                    /* Directory with initial testcases */
           *use_banner,                /* Display banner                   */
           *in_bitmap;                 /* Input bitmap                     */
 
-static u32 exec_tmout = EXEC_TIMEOUT, /* Configurable exec timeout (ms)   */
-           mem_limit = MEM_LIMIT;     /* Memory cap for child (MB)        */
+static u32 exec_tmout = EXEC_TIMEOUT; /* Configurable exec timeout (ms)   */
+static u64 mem_limit = MEM_LIMIT;     /* Memory cap for child (MB)        */
 
 static u32 stats_update_freq = 1;     /* Stats update frequency (execs)   */
 
@@ -69,7 +69,8 @@ static u8  skip_deterministic,        /* Skip deterministic stages?       */
            score_changed,             /* Scoring for favorites changed?   */
            kill_signal,               /* Signal that killed the child     */
            resuming_fuzz,             /* Resuming an older fuzzing job?   */
-           timeout_given;             /* Specific timeout given?          */
+           timeout_given,             /* Specific timeout given?          */
+           not_on_tty;                /* stdout is not a tty              */
 
 static s32 out_fd,                    /* Persistent fd for out_file       */
            dev_urandom_fd,            /* Persistent fd for /dev/urandom   */
@@ -114,7 +115,10 @@ static u64 total_crashes,             /* Total number of crashes          */
            last_crash_time,           /* Time for most recent crash (ms)  */
            last_hang_time,            /* Time for most recent hang (ms)   */
            queue_cycle,               /* Queue round counter              */
-           cycles_wo_finds;           /* Cycles without any new paths     */
+           cycles_wo_finds,           /* Cycles without any new paths     */
+           trim_execs,                /* Execs done to trim input files   */
+           bytes_trim_in,             /* Bytes coming into the trimmer    */
+           bytes_trim_out;            /* Bytes coming outa the trimmer    */
 
 static u32 subseq_hangs;              /* Number of hangs in a row         */
 
@@ -149,6 +153,7 @@ struct queue_entry {
   u32 len;                            /* Input length                     */
 
   u8  cal_done,                       /* Calibration completed?           */
+      trim_done,                      /* Trimmed?                         */
       was_fuzzed,                     /* Had any fuzzing done yet?        */
       passed_det,                     /* Deterministic stages passed?     */
       has_new_cov,                    /* Triggers new coverage?           */
@@ -382,6 +387,64 @@ static u8* DF(double val) {
   }
 
   return DI((u64)val);
+
+}
+
+
+/* Describe integer as memory size. */
+
+static u8* DMS(u64 val) {
+
+  static u8 tmp[12][16];
+  static u8 cur;
+
+  cur = (cur + 1) % 12;
+
+#define CHK_FORMAT(_divisor, _limit_mult, _fmt, _cast) do { \
+    if (val < (_divisor) * (_limit_mult)) { \
+      sprintf(tmp[cur], _fmt, ((_cast)val) / (_divisor)); \
+      return tmp[cur]; \
+    } \
+  } while (0)
+
+  /* 0-9999 */
+  CHK_FORMAT(1, 10000, "%llu B", u64);
+
+  /* 10.0k - 99.9k */
+  CHK_FORMAT(1024, 100, "%0.01f kB", double);
+
+  /* 100k - 999k */
+  CHK_FORMAT(1024, 1000, "%llu kB", u64);
+
+  /* 1.00M - 9.99M */
+  CHK_FORMAT(1024 * 1024, 10, "%0.02f MB", double);
+
+  /* 10.0M - 99.9M */
+  CHK_FORMAT(1024 * 1024, 100, "%0.01f MB", double);
+
+  /* 100M - 999M */
+  CHK_FORMAT(1024 * 1024, 1000, "%llu MB", u64);
+
+  /* 1.00G - 9.99G */
+  CHK_FORMAT(1024LL * 1024 * 1024, 10, "%0.02f GB", double);
+
+  /* 10.0G - 99.9G */
+  CHK_FORMAT(1024LL * 1024 * 1024, 100, "%0.01f GB", double);
+
+  /* 100G - 999G */
+  CHK_FORMAT(1024LL * 1024 * 1024, 1000, "%llu GB", u64);
+
+  /* 1.00T - 9.99G */
+  CHK_FORMAT(1024LL * 1024 * 1024 * 1024, 10, "%0.02f TB", double);
+
+  /* 10.0T - 99.9T */
+  CHK_FORMAT(1024LL * 1024 * 1024 * 1024, 100, "%0.01f TB", double);
+
+#undef CHK_FORMAT
+
+  /* 100T+ */
+  sprintf(tmp[cur], "%lluT", val / (1024LL * 1024 * 1024 * 1024));
+  return tmp[cur];
 
 }
 
@@ -814,7 +877,7 @@ static void read_testcases(void) {
       SAYF("\n" cLRD "[-] " cRST
            "The input directory does not seem to be valid - try again. The fuzzer needs\n"
            "    one or more test case to start with - ideally, a small file under 1 kB\n"
-           "    or so. The cases must be stored in a regular file, directly in the input\n"
+           "    or so. The cases must be stored as regular files directly in the input\n"
            "    directory.\n");
 
     PFATAL("Unable to open '%s'", in_dir);
@@ -827,6 +890,21 @@ static void read_testcases(void) {
     u8* fn = alloc_printf("%s/%s", in_dir, nl[i]->d_name);
     u8* dfn = alloc_printf("%s/.state/%s", in_dir, nl[i]->d_name);
     u8  passed_det = 0;
+
+    if (!strcmp(nl[i]->d_name, "fuzz_bitmap")) {
+
+      SAYF("\n" cLRD "[-] " cRST
+           "Looks like you are trying to resume the fuzzer by using the top-level output\n"
+           "    directory created during an earlier run of afl-fuzz. That's *almost* what\n"
+           "    we need, but please point the -i parameter to the 'queue/' subdirectory,\n"
+           "    instead :-)\n\n"
+
+           "    (The fuzzer doesn't need the remaining subdirectories in the old output\n"
+           "    dir, so you may want to delete or archive them to save space.)\n");
+
+      FATAL("'fuzz_bitmap' found in the input directory");
+
+    }
 
     free(nl[i]); /* not tracked */
  
@@ -844,8 +922,8 @@ static void read_testcases(void) {
     }
 
     if (st.st_size > MAX_FILE) 
-      FATAL("Test case '%s' is too big (%sB, limit is %sB)", fn,
-            DI(st.st_size), DI(MAX_FILE));
+      FATAL("Test case '%s' is too big (%s, limit is %s)", fn,
+            DMS(st.st_size), DMS(MAX_FILE));
 
     if (!st.st_size) 
       FATAL("Test case '%s' has zero length", fn);
@@ -869,7 +947,7 @@ static void read_testcases(void) {
     SAYF("\n" cLRD "[-] " cRST
          "Looks like there are no valid test cases in the input directory! The fuzzer\n"
          "    needs one or more test case to start with - ideally, a small file under\n"
-         "    1 kB or so. The cases must be stored in a regular file, directly in the\n"
+         "    1 kB or so. The cases must be stored as regular files directly in the\n"
          "    input directory.\n");
 
     FATAL("No usable test cases in '%s'", in_dir);
@@ -1007,19 +1085,21 @@ static void init_forkserver(char** argv) {
          "Whoops, the fork server died before doing anything useful! There are\n"
          "    several possible causes of this:\n\n"
 
-         "    - The current memory limit (%u MB) is too low for this program, causing\n"
+         "    - The current memory limit (%s) is too low for this program, causing\n"
          "      it to die due to OOM very early on (e.g., in the dynamic linker). You can\n"
          "      try bumping the limit up with the -m setting in the command line. To\n"
          "      confirm this diagnosis, it may be helpful to try:\n\n"
 
-         "      ( ulimit -Sv %u000; /path/to/fuzzed_app )\n\n"
+         "      ( ulimit -Sv $[%llu << 20]; /path/to/fuzzed_app )\n\n"
+
+         "      For binaries compiled with ASAN, please see notes_for_asan.txt.\n\n"
 
          "    - The binary always crashes when executed for some intrinsic reason beyond\n"
          "      our control. If so, you probably need to fix the underlying problem or\n"
          "      find a more suitable replacement.\n\n"
 
          "    - Least likely, there is a horrible bug in the fuzzer. If other options\n"
-         "      fail, poke <lcamtuf@coredump.cx>.\n", mem_limit, mem_limit);
+         "      fail, poke <lcamtuf@coredump.cx>.\n", DMS(mem_limit << 20), mem_limit);
 
     FATAL("Fork server crashed with signal %d", WTERMSIG(status));
 
@@ -1042,15 +1122,17 @@ static void init_forkserver(char** argv) {
        "      fuzzer. If that's the intent, specify the -n option - but expect it to\n"
        "      perform much worse than with the instrumentation in place).\n\n"
 
-       "    - The current memory limit (%u MB) is too low for this program, causing it\n"
+       "    - The current memory limit (%s) is too low for this program, causing it\n"
        "      to die due to OOM very early on (e.g., in the dynamic linker). You can\n"
        "      try bumping the limit up with the -m setting in the command line. A simple\n"
        "      way to confirm this problem may be:\n\n"
 
-       "      ( ulimit -Sv %u000; /path/to/fuzzed_app )\n\n"
+       "      ( ulimit -Sv $[%llu << 20]; /path/to/fuzzed_app )\n\n"
+
+       "      For binaries compiled with ASAN, please see notes_for_asan.txt.\n\n"
 
        "    - Least likely, there is a horrible bug in the fuzzer. If other options\n"
-       "      fail, poke <lcamtuf@coredump.cx>.\n", mem_limit, mem_limit);
+       "      fail, poke <lcamtuf@coredump.cx>.\n", DMS(mem_limit << 20), mem_limit);
 
   FATAL("No instrumentation detected or fork server fault");
 
@@ -1193,6 +1275,70 @@ static u8 run_target(char** argv) {
 }
 
 
+/* Write modified data to file for testing. If out_file is set, the old file
+   is unlinked and a new one is created. Otherwise, out_fd is rewound and
+   truncated. */
+
+static void write_to_testcase(void* mem, u32 len) {
+
+  s32 fd = out_fd;
+
+  if (out_file) {
+
+    unlink(out_file); /* Ignore errors. */
+
+    fd = open(out_file, O_WRONLY | O_CREAT | O_EXCL, 0600);
+
+    if (fd < 0) PFATAL("Unable to create '%s'", out_file);
+
+  } else lseek(fd, 0, SEEK_SET);
+
+  if (write(fd, mem, len) != len) 
+    PFATAL("Short write to output file");
+
+  if (!out_file) {
+
+    if (ftruncate(fd, len)) PFATAL("ftruncate() failed");
+    lseek(fd, 0, SEEK_SET);
+
+  } else close(fd);
+
+}
+
+
+/* The same, but with an adjustable gap. Used for trimming. */
+
+static void write_with_gap(void* mem, u32 len, u32 skip_at, u32 skip_len) {
+
+  s32 fd = out_fd;
+  u32 tail_len = len - skip_at - skip_len;
+
+  if (out_file) {
+
+    unlink(out_file); /* Ignore errors. */
+
+    fd = open(out_file, O_WRONLY | O_CREAT | O_EXCL, 0600);
+
+    if (fd < 0) PFATAL("Unable to create '%s'", out_file);
+
+  } else lseek(fd, 0, SEEK_SET);
+
+  if (skip_at && write(fd, mem, skip_at) != skip_at) 
+    PFATAL("Short write to output file");
+
+  if (tail_len && write(fd, mem + skip_at + skip_len, tail_len) != tail_len) 
+    PFATAL("Short write to output file");
+
+  if (!out_file) {
+
+    if (ftruncate(fd, len - skip_len)) PFATAL("ftruncate() failed");
+    lseek(fd, 0, SEEK_SET);
+
+  } else close(fd);
+
+}
+
+
 /* Calibrate a new test case. This is done when processing the input directory
    to warn about flaky or otherwise problematic test cases early on; and when
    new paths are discovered to detect variable behavior and so on. */
@@ -1212,49 +1358,7 @@ static u8 calibrate_case(char** argv, struct queue_entry* q, u8* use_mem,
   if (timeout_given)
     exec_tmout = exec_tmout * CAL_TMOUT_PERC / 100;
 
-  if (!out_file) {
-
-    /* The fork server has a copy of out_fd open, so let's write the input
-       file to that. */
-
-    if (lseek(out_fd, 0, SEEK_SET)) PFATAL("lseek() failed");
-
-    if (use_mem) {
-
-      if (write(out_fd, use_mem, q->len) != q->len) 
-        PFATAL("Short write to output file");
-
-    } else {
-
-      u8* mem = ck_alloc(q->len);
-      s32 fd = open(q->fname, O_RDONLY);
-
-      if (fd < 0) PFATAL("Unable to open '%s'", q->fname);
-
-      if (read(fd, mem, q->len) != q->len)
-        FATAL("Short read from '%s'", q->fname);
-
-      if (write(out_fd, mem, q->len) != q->len) 
-        PFATAL("Short write to output file");
-
-      ck_free(mem);
-      close(fd);
-
-    }
-      
-    if (ftruncate(out_fd, q->len)) PFATAL("ftruncate() failed");
-    if (lseek(out_fd, 0, SEEK_SET)) PFATAL("lseek() failed");
-
-  } else {
-
-    /* When the program is using an explicit input file, this is actually
-       easier, since we can just create a hard link at the specified
-       path. */
-
-    unlink(out_file); /* Ignore errors. */
-    if (link(q->fname, out_file)) PFATAL("link() failed");
-
-  }
+  write_to_testcase(use_mem, q->len);
 
   start_us = get_cur_time_us();
 
@@ -1382,7 +1486,6 @@ abort_calibration:
 }
 
 
-
 /* Perform dry run of all test cases to confirm that the app is working as
    expected. This is done only for the initial inputs, and only once. */
 
@@ -1393,12 +1496,27 @@ static void perform_dry_run(char** argv) {
 
   while (q) {
 
+    u8* use_mem;
     u8  res;
+    s32 fd;
+
     u8* fn = strrchr(q->fname, '/') + 1;
 
     ACTF("Attempting dry run with '%s'...", fn);
 
-    res = calibrate_case(argv, q, 0, 0, 0);
+    fd = open(q->fname, O_RDONLY);
+    if (fd < 0) PFATAL("Unable to open '%s'", q->fname);
+
+    use_mem = ck_alloc(q->len);
+
+    if (read(fd, use_mem, q->len) != q->len)
+      FATAL("Short read from '%s'", q->fname);
+
+    close(fd);
+
+    res = calibrate_case(argv, q, use_mem, 0, 0);
+    ck_free(use_mem);
+
     if (stop_soon) return;
 
     switch (res) {
@@ -1433,15 +1551,17 @@ static void perform_dry_run(char** argv) {
              "      so, please remove it. The fuzzer should be seeded with interesting\n"
              "      inputs - but not ones that cause an outright crash.\n\n"
 
-             "    - The current memory limit (%u MB) is too low for this program, causing\n"
+             "    - The current memory limit (%s) is too low for this program, causing\n"
              "      it to die due to OOM even for valid input files. To fix this, try\n"
              "      bumping it up with the -m setting in the command line. If in doubt,\n"
              "      try running something along the lines of:\n\n"
 
-             "      ( ulimit -Sv %u000; /path/to/binary [...params...] </path/to/testcase )\n\n"
+             "      ( ulimit -Sv $[%llu << 20]; /path/to/binary [...] <testcase )\n\n"
+
+             "      For binaries compiled with ASAN, please see notes_for_asan.txt.\n\n"
 
              "    - Least likely, there is a horrible bug in the fuzzer. If other options\n"
-             "      fail, poke <lcamtuf@coredump.cx>.\n", mem_limit, mem_limit);
+             "      fail, poke <lcamtuf@coredump.cx>.\n", DMS(mem_limit << 20), mem_limit);
 
         FATAL("Test case '%s' results in a crash", fn);
 
@@ -1545,35 +1665,6 @@ static void pivot_inputs(void) {
 
 
 
-/* Write modified data to file for testing. If out_file is set, the old file
-   is unlinked and a new one is created. Otherwise, out_fd is rewound and
-   truncated. */
-
-static void write_to_testcase(void* mem, u32 len) {
-
-  s32 fd = out_fd;
-
-  if (out_file) {
-
-    unlink(out_file); /* Ignore errors. */
-
-    fd = open(out_file, O_WRONLY | O_CREAT | O_EXCL, 0600);
-
-    if (fd < 0) PFATAL("Unable to create '%s'", out_file);
-
-  } else lseek(fd, 0, SEEK_SET);
-
-  if (write(fd, mem, len) != len) 
-    PFATAL("Short write to output file");
-
-  if (!out_file) {
-
-    if (ftruncate(fd, len)) PFATAL("ftruncate() failed");
-    lseek(fd, 0, SEEK_SET);
-
-  } else close(fd);
-
-}
 
 
 /* Check and update number of entries in a particular crash or hang directory.
@@ -1640,6 +1731,41 @@ static u8* describe_op(u8 hnb) {
   if (hnb == 2) strcat(ret, ",+cov");
 
   return ret;
+
+}
+
+
+/* Write a message accompanying the crash directory :-) */
+
+static void write_crash_readme(void) {
+
+  u8* fn = alloc_printf("%s/crashes/README.txt", out_dir);
+  s32 fd;
+  FILE* f;
+
+  fd = open(fn, O_WRONLY | O_CREAT | O_EXCL, 0600);
+  ck_free(fn);
+
+  /* Do not die on errors here - that would be impolite. */
+
+  if (fd < 0) return;
+
+  f = fdopen(fd, "w");
+
+  if (!f) {
+    close(fd);
+    return;
+  }
+
+  fprintf(f, "Found any cool bugs in open-source tools using afl-fuzz? If yes, please drop\n"
+             "me a mail at <lcamtuf@coredump.cx> once the issues are fixed - I'd love to\n"
+             "add your finds to the gallery at:\n\n"
+
+             "  http://lcamtuf.coredump.cx/afl/\n\n"
+
+             "Thanks :-)\n");
+
+  fclose(f);
 
 }
 
@@ -1722,6 +1848,8 @@ static void save_if_interesting(void* mem, u32 len, u8 fault) {
 
       if (unique_crashes >= KEEP_UNIQUE_CRASH) return;
 
+      if (!total_crashes) write_crash_readme();
+
       if (!dumb_mode) {
         simplify_trace(trace_bits);
         hash = hash32(trace_bits, MAP_SIZE, 0xa5be5705);
@@ -1769,6 +1897,43 @@ static void save_if_interesting(void* mem, u32 len, u8 fault) {
 }
 
 
+/* Update stats file for unattended monitoring. */
+
+static void write_stats_file(void) {
+
+  u8* fn = alloc_printf("%s/fuzzer_stats", out_dir);
+  s32 fd;
+  FILE* f;
+
+  fd = open(fn, O_WRONLY | O_CREAT | O_TRUNC, 0600);
+
+  if (fd < 0) PFATAL("Unable to create '%s'", fn);
+
+  ck_free(fn);
+
+  f = fdopen(fd, "w");
+
+  if (!f) PFATAL("fdopen() failed");
+
+  fprintf(f, "cycles_done    : %llu\n"
+             "execs_done     : %llu\n"
+             "paths_total    : %u\n"
+             "cur_path       : %u\n"
+             "pending_favs   : %u\n"
+             "pending_total  : %u\n"
+             "variable_paths : %u\n"
+             "unique_crashes : %llu\n"
+             "unique_hangs   : %llu\n",
+             queue_cycle - 1, total_execs, queued_paths, current_entry,
+             pending_favored, pending_not_fuzzed, queued_variable,
+             unique_crashes, unique_hangs);
+
+  fclose(f);
+
+}
+
+
+
 /* A spiffy retro stats screen! This is called every stats_update_freq
    execve() calls, plus in several other circumstances. */
 
@@ -1787,6 +1952,8 @@ static void show_stats(void) {
   s64 cur_ms   = get_cur_time();
   s64 run_time = cur_ms - start_time;
   double avg_exec;
+
+  if (not_on_tty) return;
 
   if (!run_time) run_time = 1;
 
@@ -1967,7 +2134,9 @@ static void show_stats(void) {
 
   if (avg_exec < 100) {
 
-    sprintf(tmp, "%s/sec (slow!)", DF(avg_exec));
+    sprintf(tmp, "%s/sec (%s)", DF(avg_exec), avg_exec < 20 ?
+            "zzzz..." : "slow!");
+
     SAYF(bV bSTOP "  exec speed : " cLRD "%-21s ", tmp);
 
   } else {
@@ -2016,27 +2185,34 @@ static void show_stats(void) {
           DI(stage_finds[STAGE_INTEREST16]), DI(stage_cycles[STAGE_INTEREST16]),
           DI(stage_finds[STAGE_INTEREST32]), DI(stage_cycles[STAGE_INTEREST32]));
 
-  if (sync_id) {
+  SAYF(bV bSTOP "  known ints : " cNOR "%-37s " bSTG bV bSTOP " imported : "
+       cNOR "%-11s " bSTG bV "\n", tmp, DI(queued_imported));
 
-    SAYF(bV bSTOP "  known ints : " cNOR "%-37s " bSTG bV bSTOP " imported : "
-         cNOR "%-11s " bSTG bV "\n", tmp, DI(queued_imported));
-
-  } else {
-
-    SAYF(bV bSTOP "  known ints : " cNOR "%-37s " bSTG bV bSTOP "   latent : "
-         cNOR "%-11s " bSTG bV "\n", tmp, DI(queued_later_on));
-
-  }
 
   sprintf(tmp, "%s/%s, %s/%s",
           DI(stage_finds[STAGE_HAVOC]), DI(stage_cycles[STAGE_HAVOC]),
           DI(stage_finds[STAGE_SPLICE]), DI(stage_cycles[STAGE_SPLICE]));
 
-  SAYF(bV bSTOP "       havoc : " cNOR "%-37s " bSTG bV bSTOP 
+  SAYF(bV bSTOP "       havoc : " cNOR "%-37s " bSTG bV bSTOP
        " variable : %s%-11s " bSTG bV "\n", tmp, queued_variable ? cLRD : cNOR,
        DI(queued_variable));
 
-  SAYF(bLB bH30 bH20 bH2 bH bHT bH20 bH2 bH2 bRB bSTOP "\n\n");
+  if (!bytes_trim_out) {
+
+    sprintf(tmp, "n/a");
+
+  } else {
+
+    sprintf(tmp, "%s/%s (%0.02f%% gain)", DMS(bytes_trim_in - bytes_trim_out),
+            DI(trim_execs), ((double)(bytes_trim_in - bytes_trim_out)) * 100
+            / bytes_trim_in);
+
+  }
+
+  SAYF(bV bSTOP "        trim : " cNOR "%-37s " bSTG bV bSTOP 
+       "   latent : " cNOR "%-11s " bSTG bV "\n", tmp, DI(queued_later_on));
+
+  SAYF(bLB bH30 bH20 bH2 bH bHT bH20 bH2 bH2 bRB bSTOP cRST "\n");
 
   /* Hallelujah! */
 
@@ -2078,10 +2254,10 @@ static void show_init_stats(void) {
   if (!resuming_fuzz) {
 
     if (max_len > 50 * 1024)
-      WARNF(cLRD "Some test cases are huge (%sB) - reduce size%s!", DI(max_len),
+      WARNF(cLRD "Some test cases are huge (%s) - reduce size%s!", DMS(max_len),
             skip_deterministic ? "" : " or use -d");
     else if (max_len > 10 * 1024)
-      WARNF("Some test cases are big (%sB) - try trimming down%s.", DI(max_len),
+      WARNF("Some test cases are big (%s) - try trimming down%s.", DMS(max_len),
             skip_deterministic ? "" : " or using -d");
 
     if (useless_at_start)
@@ -2119,6 +2295,141 @@ static void show_init_stats(void) {
   }
 
   OKF("All set and ready to roll!");
+
+}
+
+
+/* Find first power of two greater or equal to val. */
+
+static u32 next_p2(u32 val) {
+
+  u32 ret = 1;
+  while (val > ret) ret <<= 1;
+  return ret;
+
+} 
+
+
+/* Trim all new test cases to save cycles when doing deterministic checks. The
+   trimmer uses power-of-two increments somewhere between 1/16 and 1/1024 of
+   file size, to keep the stage short and sweet. */
+
+static u8 trim_case(char** argv, struct queue_entry* q, u8* in_buf) {
+
+  static u8 tmp[64];
+
+  u8  fault;
+  u32 cksum;
+  u8  needs_write = 0;
+  u32 trim_exec = 0;
+  u32 remove_len;
+  u32 len_p2;
+
+  if (q->len < 5) return 0;
+
+  stage_name = tmp;
+
+  write_to_testcase(in_buf, q->len);
+  fault = run_target(argv);
+  trim_execs++;
+
+  if (stop_soon || fault) goto abort_trimming;
+
+  cksum = hash32(trace_bits, MAP_SIZE, 0xa5b35705);
+
+  bytes_trim_in += q->len;
+
+  /* Select initial chunk len, starting with large steps. */
+
+  len_p2 = next_p2(q->len);
+
+  remove_len = MAX(len_p2 / TRIM_START_STEPS, TRIM_MIN_BYTES);
+
+  /* Continue until the number of steps gets too high or the stepover
+     gets too small. */
+
+  while (remove_len >= MAX(len_p2 / TRIM_END_STEPS, TRIM_MIN_BYTES)) {
+
+    u32 remove_pos = remove_len;
+
+    sprintf(tmp, "trim %s/%s", DI(remove_len), DI(remove_len));
+
+    stage_cur = 0;
+    stage_max = q->len / remove_len;
+
+    while (remove_pos < q->len) {
+
+      u32 trim_avail = MIN(remove_len, q->len - remove_pos);
+      u32 new_cksum;
+
+      write_with_gap(in_buf, q->len, remove_pos, trim_avail);
+
+      fault = run_target(argv);
+      trim_execs++;
+
+      if (stop_soon || fault == EXEC_FAIL) goto abort_trimming;
+
+      /* Note that we don't keep track of crashes or hangs here; maybe TODO? */
+
+      new_cksum = hash32(trace_bits, MAP_SIZE, 0xa5b35705);
+
+      /* If the deletion had no impact on the trace, make it permanent. This
+         isn't perfect for variable-path inputs, but we're just making a
+         best-effort pass, so it's not a big deal if we end up with false
+         negatives every now and then. */
+
+      if (new_cksum == cksum) {
+
+        u32 move_tail = q->len - remove_pos - trim_avail;
+
+        q->len -= trim_avail;
+        len_p2  = next_p2(q->len);
+
+        memcpy(in_buf + remove_pos, in_buf + remove_pos + trim_avail, 
+               move_tail);
+
+        needs_write = 1;
+
+      } else remove_pos += remove_len;
+
+      /* Since this can be slow, update the screen every now and then. */
+
+      if (!(trim_exec++ % stats_update_freq)) show_stats();
+
+      stage_cur++;
+
+    }
+
+    remove_len >>= 1;
+
+  }
+
+  /* If we have made changes to in_buf, we also need to update the on-disk
+     version of the test case. */
+
+  if (needs_write) {
+
+    s32 fd;
+
+    unlink(q->fname); /* Ignore errors */
+
+    fd = open(q->fname, O_WRONLY | O_CREAT | O_EXCL, 0600);
+
+    if (fd < 0) PFATAL("Unable to create '%s'", q->fname);
+
+    if (write(fd, in_buf, q->len) != q->len)
+      PFATAL("Short write to '%s'", q->fname);
+
+    close(fd);
+
+  }
+
+  fault = 0;
+
+abort_trimming:
+
+  bytes_trim_out += q->len;
+  return fault;
 
 }
 
@@ -2235,13 +2546,19 @@ static u32 calculate_score(struct queue_entry* q) {
 
   }
 
-  /* Final adjustment based on input depth, under the assumption that fuzzing 
-     deeper test cases is more likely to reveal stuff that can't be 
+  /* Final adjustment based on input depth, under the assumption that fuzzing
+     deeper test cases is more likely to reveal stuff that can't be
      discovered with traditional fuzzers. */
 
-  if (q->depth > 3) perf_score *= 2;
-  if (q->depth > 6) perf_score *= 2;
-  if (q->depth > 12) perf_score *= 2;
+  switch (q->depth) {
+
+    case 0 ... 3:   break;
+    case 4 ... 6:   perf_score *= 2; break;
+    case 7 ... 12:  perf_score *= 4; break;
+    case 13 ... 24: perf_score *= 6; break;
+    default:        perf_score *= 8;
+
+  }
 
   /* Make sure that we don't go over limit. */
 
@@ -2299,6 +2616,9 @@ static u8 fuzz_one(char** argv) {
 
 #endif /* ^IGNORE_FINDS */
 
+  if (not_on_tty)
+    ACTF("Fuzzing test case #%u (%u total)...", current_entry, queued_paths);
+
   /* Map the test case into memory. */
 
   fd = open(queue_cur->fname, O_RDONLY);
@@ -2307,7 +2627,7 @@ static u8 fuzz_one(char** argv) {
 
   len = queue_cur->len;
 
-  orig_in = in_buf = mmap(0, len, PROT_READ, MAP_PRIVATE, fd, 0);
+  orig_in = in_buf = mmap(0, len, PROT_READ | PROT_WRITE, MAP_PRIVATE, fd, 0);
 
   if (mmap == MAP_FAILED) PFATAL("Unable to mmap '%s'", queue_cur->fname);
 
@@ -2318,7 +2638,6 @@ static u8 fuzz_one(char** argv) {
      benefits. */
 
   out_buf = ck_alloc(len);
-  memcpy(out_buf, in_buf, len);
 
   subseq_hangs = 0;
 
@@ -2330,7 +2649,17 @@ static u8 fuzz_one(char** argv) {
 
   if (!queue_cur->cal_done) {
 
-    u8 res = calibrate_case(argv, queue_cur, in_buf, queue_cycle - 1, 1);
+    u8 res;
+
+    /* This is a bit half-hearted... */
+
+    stage_name  = "calibration";
+    stage_cur   = 0;
+    stage_max   = CAL_CYCLES;
+
+    show_stats();
+
+    res = calibrate_case(argv, queue_cur, in_buf, queue_cycle - 1, 1);
 
     if (res == FAULT_ERROR)
       FATAL("Unable to execute target application");
@@ -2341,6 +2670,29 @@ static u8 fuzz_one(char** argv) {
     }
 
   }
+
+  /************
+   * TRIMMING *
+   ************/
+
+  if (!dumb_mode && !queue_cur->trim_done) {
+
+    u8 res = trim_case(argv, queue_cur, in_buf);
+
+    if (res == FAULT_ERROR)
+      FATAL("Unable to execute target application");
+
+    if (stop_soon) {
+      cur_skipped_paths++;
+      goto abandon_entry;
+    }
+
+    len = queue_cur->len;
+    queue_cur->trim_done = 1;
+
+  }
+
+  memcpy(out_buf, in_buf, len);
 
   /*********************
    * PERFORMANCE SCORE *
@@ -3590,7 +3942,7 @@ static void check_binary(u8* fname) {
     SAYF("\n" cLRD "[-] " cRST
          "Oops, the target binary looks like a shell script. Some build systems will\n"
          "    sometimes generate shell stubs for dynamically linked programs; try static\n"
-         "    compilation (./configure --disable-shared) if that's the cause.\n\n"
+         "    library mode (./configure --disable-shared) if that's the case.\n\n"
 
          "    Another possible cause is that you are actually trying to use a shell\n" 
          "    wrapper around the fuzzed component. Invoking shell can slow down the\n" 
@@ -3644,7 +3996,15 @@ static void check_terminal(void) {
 
   struct winsize ws;
 
-  if (ioctl(1, TIOCGWINSZ, &ws)) return;
+  if (ioctl(1, TIOCGWINSZ, &ws)) {
+
+    if (errno == ENOTTY) {
+      OKF("Looks like we're not running on a tty, so I'll be a bit less verbose.");
+      not_on_tty = 1;
+    }
+
+    return;
+  }
 
   if (ws.ws_row < 25 || ws.ws_col < 80) {
 
@@ -3653,7 +4013,8 @@ static void check_terminal(void) {
          "    That's not enough for afl-fuzz to correctly draw its fancy ANSI UI!\n\n"
 
          "    Depending on the terminal software you are using, you should be able to\n"
-         "    resize the window or adjust its dimensions in the settings menu.\n");
+         "    resize the window by dragging its edges, or to adjust the dimensions in\n"
+         "    the settings menu.\n");
 
     FATAL("Please resize terminal to 80x25");
 
@@ -3728,7 +4089,7 @@ static void setup_dirs_fds(void) {
 
            "    - To resume the fuzzing session, use the queue/ subdirectory in the output\n"
            "      dir as the *input* for the new session, and point the -o option\n"
-           "      to some new location. Good luck!\n");
+           "      to a brand new location. Good luck!\n");
 
       PFATAL("Unable to create '%s'", tmp);
 
@@ -3829,12 +4190,14 @@ static void fix_up_sync(void) {
   u8* x = sync_id;
 
   if (dumb_mode)
-    FATAL("-S and -n are mutually exclusive");
+    FATAL("-S / -M and -n are mutually exclusive");
+
+  if (skip_deterministic) FATAL("-d is implied in -S / -M mode");
 
   while (*x) {
 
     if (!isalnum(*x) && *x != '_' && *x != '-')
-      FATAL("Non-alphanumeric fuzzer ID specified via -S");
+      FATAL("Non-alphanumeric fuzzer ID specified via -S or -M");
 
     x++;
 
@@ -3846,8 +4209,6 @@ static void fix_up_sync(void) {
 
   sync_dir = out_dir;
   out_dir  = x;
-
-  if (skip_deterministic) FATAL("-d is implied in -S mode");
 
   if (!force_deterministic) {
     skip_deterministic = 1;
@@ -3873,7 +4234,7 @@ int main(int argc, char** argv) {
   u64 prev_queued = 0;
   u32 sync_interval_cnt = 0;
 
-  SAYF(cCYA "afl-fuzz " cBRI VERSION cNOR " (" __DATE__ " " __TIME__ 
+  SAYF(cCYA "afl-fuzz " cBRI VERSION cRST " (" __DATE__ " " __TIME__ 
        ") by <lcamtuf@google.com>\n");
 
   signal(SIGHUP,   handle_stop_sig);
@@ -3885,7 +4246,7 @@ int main(int argc, char** argv) {
   signal(SIGTSTP, SIG_IGN);
   signal(SIGPIPE, SIG_IGN);
 
-  while ((opt = getopt(argc,argv,"+i:o:f:m:t:T:dDnB:S:")) > 0)
+  while ((opt = getopt(argc,argv,"+i:o:f:m:t:T:dnB:S:M:")) > 0)
 
     switch (opt) {
 
@@ -3901,9 +4262,13 @@ int main(int argc, char** argv) {
         out_dir = optarg;
         break;
 
+      case 'M':
+
+        force_deterministic = 1;
+
       case 'S': /* sync ID */
 
-        if (sync_id) FATAL("Multiple -S options not supported");
+        if (sync_id) FATAL("Multiple -S or -M options not supported");
         sync_id = optarg;
         break;
 
@@ -3920,10 +4285,35 @@ int main(int argc, char** argv) {
         timeout_given = 1;
         break;
 
-      case 'm':
+      case 'm': {
 
-        mem_limit = atoi(optarg);
-        if (mem_limit < 5) FATAL("Bad or dangerously low value of -m");
+          u8 suffix = 'M';
+
+          if (sscanf(optarg, "%llu%c", &mem_limit, &suffix) < 1)
+            FATAL("Bad syntax used for -m");
+
+          switch (suffix) {
+
+            case 'T': mem_limit *= 1024 * 1024; break;
+
+            case 'G': mem_limit *= 1024; break;
+
+            case 'k': mem_limit /= 1024; break;
+
+            case 'M':
+            case '0' ... '9': break;
+
+            default:  FATAL("Unsupported suffix or bad syntax for -m");
+
+          }
+
+          if (mem_limit < 5) FATAL("Dangerously low value of -m");
+
+          if (sizeof(rlim_t) == 4 && mem_limit > 2000)
+            FATAL("Value of -m out of range on 32-bit systems");
+
+        }
+
         break;
 
       case 'd':
@@ -3933,23 +4323,18 @@ int main(int argc, char** argv) {
         use_splicing = 1;
         break;
 
-      case 'D':
-
-        if (force_deterministic) FATAL("Multiple -D options not supported");
-        force_deterministic = 1;
-        break;
-
       case 'B':
 
         /* This is a secret undocumented option! It is useful if you find
            an interesting test case during a normal fuzzing process, and you
            want to start a new process seeded just with that case - but you
-           don't want the fuzzer to create new test cases for paths already
+           don't want the fuzzer to re-invent new test cases for paths already
            discovered by the earlier run.
 
            In essence, specifying -B and using fuzz_bitmap from the earlier
            run will cause the fuzzer to consider all paths reflected in that
-           map to be uninteresting. */
+           map to be uninteresting, and look only for the stuff that isn't
+           in that bitmap yet. */
 
         in_bitmap = optarg;
         read_bitmap(in_bitmap);
@@ -3974,12 +4359,7 @@ int main(int argc, char** argv) {
 
   if (optind == argc || !in_dir || !out_dir) usage(argv[0]);
 
-  if (sync_id) {
-    fix_up_sync();
-  } else {
-    if (force_deterministic) 
-      FATAL("-D is supported only in conjunction with -S");
-  }
+  if (sync_id) fix_up_sync();
 
   fix_up_banner(argv[optind]);
 
@@ -4009,10 +4389,11 @@ int main(int argc, char** argv) {
 
   if (stop_soon) goto stop_fuzzing;
 
-  sleep(4);
-  start_time += 4000;
-
-  if (stop_soon) goto stop_fuzzing;
+  if (!not_on_tty) {
+    sleep(4);
+    start_time += 4000;
+    if (stop_soon) goto stop_fuzzing;
+  }
 
   clear_screen = 1;
 
@@ -4029,7 +4410,11 @@ int main(int argc, char** argv) {
       cur_skipped_paths = 0;
       queue_cur         = queue;
 
+      write_stats_file();
       show_stats();
+
+      if (not_on_tty) 
+        ACTF("Entering queue cycle %llu.", queue_cycle);
 
       /* If we had a full queue cycle with no new finds, try
          recombination strategies next. */

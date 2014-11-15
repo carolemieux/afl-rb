@@ -24,6 +24,9 @@
    hardening options that may help detect memory management issues more
    reliably. Depending on config.h, this may include enabling ASAN.
 
+   If AFL_QUIET is set, non-essential messages will not be shown. This is
+   useful when dealing with wonky build systems.
+
  */
 
 #define AFL_MAIN
@@ -111,10 +114,17 @@ static void edit_params(u32 argc, char** argv) {
   name = strrchr(argv[0], '/');
   if (!name) name = argv[0]; else name++;
 
-  gcc_params[0] = "gcc";
+  if (strcmp(name, "afl-g++") && strcmp(name, "afl-c++")) {
 
-  if (!strcmp(name, "afl-g++") ||
-      !strcmp(name, "afl-c++")) gcc_params[0] = "g++";
+    u8* alt_cc = getenv("AFL_CC");
+    gcc_params[0] = alt_cc ? alt_cc : (u8*)"gcc";
+
+  } else {
+
+    u8* alt_cxx = getenv("AFL_CXX");
+    gcc_params[0] = alt_cxx ? alt_cxx : (u8*)"g++";
+
+  }
 
   while (--argc) {
     u8* cur = *(++argv);
@@ -128,24 +138,6 @@ static void edit_params(u32 argc, char** argv) {
 
     }
 
-#ifndef USE_64BIT
-
-    if (!strcmp(cur, "-m64")) {
-      if (!be_quiet)
-        WARNF("64-bit compilation attempted, overriding (USE_64BIT not set)");
-      continue;
-    }
-
-#else
-
-    if (!strcmp(cur, "-m32")) {
-      if (!be_quiet)
-        WARNF("32-bit compilation attempted, overriding (USE_64BIT set)");
-      continue;
-    }
-
-#endif /* ^!USE_64BIT */
-
     if (!strcmp(cur, "-pipe")) continue;
 
     if (strstr(cur, "FORTIFY_SOURCE")) fortify_set = 1;
@@ -158,22 +150,20 @@ static void edit_params(u32 argc, char** argv) {
   gcc_params[gcc_par_cnt++] = as_path;
   gcc_params[gcc_par_cnt++] = "-g";
 
-#ifndef USE_64BIT
-  gcc_params[gcc_par_cnt++] = "-m32";
-#else
-  gcc_params[gcc_par_cnt++] = "-m64";
-#endif /* ^!USE_64BIT */
-
-  if (getenv("AFL_HARDEN")) {
+  if (getenv("AFL_HARDEN") || getenv("AFL_HARDEN_NOASAN")) {
 
     gcc_params[gcc_par_cnt++] = "-fstack-protector-all";
+
+    if (!fortify_set)
+      gcc_params[gcc_par_cnt++] = "-D_FORTIFY_SOURCE=2";
+
+  }
+
+  if (getenv("AFL_HARDEN")) {
 
 #ifdef USE_ASAN
     gcc_params[gcc_par_cnt++] = "-fsanitize=address";
 #endif /* USE_ASAN */
-
-    if (!fortify_set)
-      gcc_params[gcc_par_cnt++] = "-D_FORTIFY_SOURCE=2";
 
   }
 
@@ -192,7 +182,7 @@ int main(int argc, char** argv) {
 
   if (!getenv("AFL_QUIET") && !getenv("as_nl")) {
 
-    SAYF(cCYA "afl-gcc " cBRI VERSION cNOR " (" __DATE__ " " __TIME__
+    SAYF(cCYA "afl-gcc " cBRI VERSION cRST " (" __DATE__ " " __TIME__
          ") by <lcamtuf@google.com>\n");
 
   } else be_quiet = 1;

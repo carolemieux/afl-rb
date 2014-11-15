@@ -24,11 +24,14 @@
       mkdir in_dir
       echo -n '() { a() { a; }; : >b; }' >in_dir/script.txt
 
+      (You do not want to compile bash-harness with afl-gcc, by the way.)
+
    4) Run the fuzzer with:
 
       /path/to/afl-fuzz -d -i in_dir -o out_dir ./bash-harness
 
-      The -d parameter is optional; will cover more ground faster, but
+      The -d parameter is advisable only if the tested shell is fairly slow
+      or if you are in a hury; will cover more ground faster, but
       less systematically.
 
    5) Watch for crashes in out_dir/crashes/. Also watch for any new files

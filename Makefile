@@ -14,7 +14,7 @@
 #
 
 PROGNAME    = afl
-VERSION     = 0.43b
+VERSION     = 0.47b
 
 BIN_PATH    = /usr/local/bin
 HELPER_PATH = /usr/local/lib/afl
@@ -25,73 +25,75 @@ CFLAGS     += -O3 -Wall -D_FORTIFY_SOURCE=2 -g -Wno-pointer-sign \
 	      -DAFL_PATH=\"$(HELPER_PATH)\" -DVERSION=\"$(VERSION)\"
 
 GCC48PLUS  := $(shell expr `$(CC) -dumpversion | cut -f-2 -d.` \>= 4.8)
-CONF_64BIT := $(shell grep -E '^[ 	]*\#define USE_64BIT' config.h)
 
 ifeq "$(GCC48PLUS)" "1"
   CFLAGS   += -DUSE_ASAN=1
 endif
 
-ifeq "$(CONF_64BIT)" ""
-  CK_TARGET = test_32
-  CFLAGS   += -m32
-else
-  CK_TARGET = test_64
-  CFLAGS   += -m64 -Wno-format
+ifneq "$(HOSTNAME)" "raccoon"
+  CFLAGS   += -Wno-format
 endif
 
 COMM_HDR    = alloc-inl.h config.h debug.h types.h
 
-all: test_gcc test_x86 $(CK_TARGET) $(PROGS) all_done
+all: test_gcc test_x86 $(PROGS) test_build test_prev all_done
 
 test_gcc:
 	@echo "[*] Checking for an installation of GCC..."
-	@$(CC) -v >.test 2>&1; grep -q '^gcc version' .test || ( echo; echo "Oops, looks like you don't have GCC installed (or you need to specify \$CC)."; echo; rm -f .test; exit 1 )
+	@$(CC) -v >.test 2>&1; grep -iq '^gcc.version' .test || ( echo; echo "Oops, looks like you don't have GCC installed (or you need to specify \$CC)."; echo; rm -f .test; exit 1 )
 	@rm -f .test
 
-test_x86:
+test_x86: | test_gcc
 	@echo "[*] Checking for the ability to compile x86 code..."
 	@echo 'main() { __asm__("xorb %al, %al"); }' | $(CC) -w -x c - -o .test || ( echo; echo "Oops, looks like your compiler can't generate x86 code."; echo; echo "(If you are looking for ARM, see experimental/arm_support/README.)"; echo; exit 1 )
 	@rm -f .test
 
-test_32:
-	@echo "[*] Checking for 32-bit mode support..."
-	@echo 'main() { }' | $(CC) -w -x c - -m32 -o .test || ( echo; echo "Oops, looks like your compiler can't generate 32-bit code!"; echo; echo "You can still build AFL, but you need to edit config.h and uncomment USE_64BIT."; echo; exit 1 )
-	@rm -f .test
-
-test_64:
-	@echo "[*] Checking for 64-bit mode support..."
-	@echo 'main() { }' | $(CC) -w -x c - -m64 -o .test || ( echo; echo "Oops, looks like your compiler can't generate 64-bit code!"; echo; echo "You can still build AFL, but you need to edit config.h and comment out USE_64BIT."; echo; exit 1 )
-	@rm -f .test
-
-afl-gcc: afl-gcc.c $(COMM_HDR)
+afl-gcc: afl-gcc.c $(COMM_HDR) | test_x86
 	$(CC) $(CFLAGS) $(LDFLAGS) $@.c -o $@
 	ln -s afl-gcc afl-g++ 2>/dev/null || true
 
-afl-as: afl-as.c afl-as.h $(COMM_HDR)
+afl-as: afl-as.c afl-as.h $(COMM_HDR) | test_x86
 	$(CC) $(CFLAGS) $(LDFLAGS) $@.c -o $@
 	ln -s afl-as as  2>/dev/null || true
 
-afl-fuzz: afl-fuzz.c $(COMM_HDR)
+afl-fuzz: afl-fuzz.c $(COMM_HDR) | test_x86
 	$(CC) $(CFLAGS) $(LDFLAGS) $@.c -o $@
 
-afl-showmap: afl-showmap.c $(COMM_HDR)
+afl-showmap: afl-showmap.c $(COMM_HDR) | test_x86
 	$(CC) $(CFLAGS) $(LDFLAGS) $@.c -o $@
 
-all_done:
-	@echo -e "[+] All done! Be sure to review README - it's pretty short and useful."
+test_build: afl-gcc afl-as afl-showmap
+	@echo "[*] Testing GCC wrapper and instrumentation output..."
+	AFL_QUIET=1 AFL_PATH=. ./afl-gcc $(CFLAGS) test-instr.c -o test-instr
+	echo 0 | AFL_SINK_OUTPUT=1 AFL_QUIET=1 ./afl-showmap ./test-instr 2>.test-instr0
+	echo 1 | AFL_SINK_OUTPUT=1 AFL_QUIET=1 ./afl-showmap ./test-instr 2>.test-instr1
+	@rm -f test-instr
+	@diff -qs .test-instr0 .test-instr1; DR="$$?"; rm -f .test-instr0 .test-instr1; if [ "$$DR" = "0" ]; then echo; echo "Oops, the instrumentation does not seem to be behaving correctly!"; echo; echo "Please ping <lcamtuf@google.com> to troubleshoot the issue."; echo; exit 1; fi
+	@echo "[+] All right, the instrumentation seems to be working!"
+
+test_prev: test_build
+	@test -f "$(HELPER_PATH)/as"; TR="$$?"; if [ "$$TR" = "0" ]; then echo "[!] NOTE: You seem to have another copy of afl installed in $(HELPER_PATH)."; echo "    You must use 'make install' or set AFL_PATH to use the current build instead."; else echo "[+] No previously-installed build detected, no need to replace anything."; fi
+
+all_done: test_prev
+	@echo "[+] All done! Be sure to review README - it's pretty short and useful."
 
 clean:
 	rm -f $(PROGS) as afl-g++ *.o *~ a.out core core.[1-9][0-9]* *.stackdump test .test
 	rm -rf out_dir
 
 install: all
-	install afl-gcc afl-g++ afl-fuzz afl-showmap $(BIN_PATH)
-	mkdir -p -m 755 $(HELPER_PATH) 2>/dev/null
-	install afl-as as $(HELPER_PATH)
+	install afl-gcc afl-g++ afl-fuzz afl-showmap $${DESTDIR}$(BIN_PATH)
+	mkdir -p -m 755 $${DESTDIR}$(HELPER_PATH) 2>/dev/null
+	install afl-as as $${DESTDIR}$(HELPER_PATH)
 
 publish: clean
 	test "`basename $$PWD`" = "afl" || exit 1
 	cd ..; rm -rf $(PROGNAME)-$(VERSION); cp -pr $(PROGNAME) $(PROGNAME)-$(VERSION); \
-	  tar cfvz ~/www/$(PROGNAME).tgz $(PROGNAME)-$(VERSION)
-	chmod 644 ~/www/$(PROGNAME).tgz
+	  tar cfvz ~/www/afl/releases/$(PROGNAME)-$(VERSION).tgz $(PROGNAME)-$(VERSION)
+	chmod 644 ~/www/afl/releases/$(PROGNAME)-$(VERSION).tgz
+	( cd ~/www/afl/releases/; ln -s -f $(PROGNAME)-$(VERSION).tgz $(PROGNAME)-latest.tgz )
+	cat docs/README >~/www/afl/README.txt
+	cat docs/status_screen.txt >~/www/afl/status_screen.txt
+
+
 

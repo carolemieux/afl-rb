@@ -13,8 +13,8 @@ ARMv7 instrumentation in place of the default x86 code. Several notes:
     1) Copy the *.c and *.h files in this directory to the root directory of 
        the project (../../), overwriting the original code,
 
-    2) Edit the top-level Makefile to delete the first line that mentions '-m32'
-       and (separately) the first line that mentions '__asm__'.
+    2) Edit the top-level Makefile to delete the first line that mentions
+       '__asm__' (without quotes).
 
     3) Type in 'make clean all',
 

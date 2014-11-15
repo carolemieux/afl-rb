@@ -13,6 +13,15 @@
 #
 #   http://www.apache.org/licenses/LICENSE-2.0
 #
+# This tool tries to find a subset of discovered paths that includes all tuple
+# values seen so far. This subset is usually considerably smaller than the
+# raw, progressively generated queue/ directory created by the fuzzer, because
+# many test cases are rendered obsolete by later finds with better coverage.
+#
+# Note that the tool assumes that the tested program reads from stdin and
+# requires no cmdline parameters; very simple edits are required to support 
+# other use cases.
+#
 
 echo "path minimization tool for afl-fuzz by <lcamtuf@google.com>"
 echo
@@ -70,6 +79,8 @@ echo "[*] Evaluating input files (this may take a while)..."
 for c in $DIR/*; do
 
   B=`basename -- "$c"`
+
+  # Modify this if $BIN needs to be called with additional parameters, etc.
 
   AFL_SINK_OUTPUT=1 "$SM" "$BIN" <"$c" 2>&1 | grep -E '^[0-9]{5}/[0-9]{1,3}$' >".traces/$B"
 
