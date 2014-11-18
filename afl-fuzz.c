@@ -49,6 +49,10 @@
 #include <sys/mman.h>
 #include <sys/ioctl.h>
 
+
+/* Lots of globals, but mostly for the status UI and other things where it
+   really makes no sense to haul them around as function parameters. */
+
 static u8 *in_dir,                    /* Directory with initial testcases */
           *out_file,                  /* File to fuzz, if any             */
           *out_dir,                   /* Working & output directory       */
@@ -82,7 +86,9 @@ static s32 forksrv_pid,               /* PID of the fork server           */
            child_pid = -1;            /* PID of the fuzzed program        */
 
 static u8* trace_bits;                /* SHM with instrumentation bitmap  */
-static u8  virgin_bits[MAP_SIZE];     /* Regions yet untouched by fuzzing */
+static u8  virgin_bits[MAP_SIZE],     /* Regions yet untouched by fuzzing */
+           virgin_hang[MAP_SIZE],     /* Bits we haven't seen in hangs    */
+           virgin_crash[MAP_SIZE];    /* Bits we haven't seen in crashes  */
 
 static s32 shm_id;                    /* ID of the SHM region             */
 
@@ -364,7 +370,7 @@ static u8* DI(u64 val) {
 #undef CHK_FORMAT
 
   /* 100T+ */
-  sprintf(tmp[cur], "%lluT", val / (1000LL * 1000 * 1000 * 1000));
+  strcpy(tmp[cur], "infty");
   return tmp[cur];
 
 }
@@ -444,7 +450,7 @@ static u8* DMS(u64 val) {
 #undef CHK_FORMAT
 
   /* 100T+ */
-  sprintf(tmp[cur], "%lluT", val / (1024LL * 1024 * 1024 * 1024));
+  strcpy(tmp[cur], "infty");
   return tmp[cur];
 
 }
@@ -622,12 +628,12 @@ static inline void read_bitmap(u8* fname) {
 /* Check if the current execution path brings anything new to the table.
    Update virgin bits to reflect the finds. Returns 1 if the only change is
    the hit-count for a particular tuple; 2 if there are new tuples seen. 
-   Updates virgin_bits[], so subsequent calls will always return 0. */
+   Updates the map, so subsequent calls will always return 0. */
 
-static inline u8 has_new_bits(void) {
+static inline u8 has_new_bits(u8* virgin_map) {
 
   u32* current = (u32*)trace_bits;
-  u32* virgin  = (u32*)virgin_bits;
+  u32* virgin  = (u32*)virgin_map;
 
   u32  i = (MAP_SIZE >> 2);
   u8   ret = 0;
@@ -655,7 +661,7 @@ static inline u8 has_new_bits(void) {
 
   }
 
-  if (ret) write_bitmap();
+  if (ret && virgin_map == virgin_bits) write_bitmap();
 
   return ret;
 
@@ -701,15 +707,14 @@ static inline u32 count_non_255_bytes(u8* mem) {
 }
 
 
-/* Destructively simplify trace by eliminating hit count information. This
-   is called when generating unique identifiers for crashes or hangs. */
+/* Destructively simplify trace by eliminating hit count information. */
 
 static void simplify_trace(u8* mem) {
 
   u32 i = MAP_SIZE;
 
   while (i--) {
-    if (*mem) *mem = 1;
+    if (*mem) *mem = 128; else *mem = 1;
     mem++;
   }
 
@@ -869,6 +874,9 @@ static void setup_shm(void) {
   u8* shm_str;
 
   if (!in_bitmap) memset(virgin_bits, 255, MAP_SIZE);
+
+  memset(virgin_hang, 255, MAP_SIZE);
+  memset(virgin_crash, 255, MAP_SIZE);
 
   shm_id = shmget(IPC_PRIVATE, MAP_SIZE, IPC_CREAT | IPC_EXCL | 0600);
 
@@ -1431,7 +1439,7 @@ static u8 calibrate_case(char** argv, struct queue_entry* q, u8* use_mem,
       goto abort_calibration;
     }
 
-    hnb = has_new_bits();
+    hnb = has_new_bits(virgin_bits);
 
     /* If we have already ran this test case, has_new_bits() is not expected
        to return a non-zero value. */
@@ -1467,7 +1475,7 @@ static u8 calibrate_case(char** argv, struct queue_entry* q, u8* use_mem,
 
     if (cksum != new_cksum) {
 
-      u8 hnb = has_new_bits();
+      u8 hnb = has_new_bits(virgin_bits);
       if (hnb > new_bits) new_bits = hnb;
 
       var_detected = 1;
@@ -1714,37 +1722,6 @@ static void pivot_inputs(void) {
 }
 
 
-
-
-
-/* Check and update number of entries in a particular crash or hang directory.
-   This is used to limit the number of samples captured per fault and avoid
-   using up gigabytes of disk space. Returns 1 if we're over limit. */
-
-static u8 check_update_count(u8* dir) {
-
-  u8* fn = alloc_printf("%s/.count", dir);
-  s32 fd = open(fn, O_RDWR | O_CREAT, 0600);
-  u32 cnt;
-
-  if (fd < 0) PFATAL("Unable to create '%s'", fn);
-
-  if (read(fd, &cnt, 4) != 4) cnt = 1;
-
-  cnt++;
-
-  lseek(fd, 0, SEEK_SET);
-
-  if (write(fd, &cnt, 4) != 4) PFATAL("Short write to '%s'", fn);
-
-  close(fd);
-  ck_free(fn);
-
-  return (cnt > KEEP_SAMPLES);
-
-}
-
-
 /* Construct a file name for a new test case, capturing the operation
    that led to its discovery. Uses a static buffer. */
 
@@ -1825,10 +1802,9 @@ static void write_crash_readme(void) {
 
 static void save_if_interesting(void* mem, u32 len, u8 fault) {
 
-  u8  *fn = "", *dir;
+  u8  *fn = "";
   u8  hnb;
   s32 fd;
-  u32 hash = 0;
 
   switch (fault) {
 
@@ -1837,7 +1813,7 @@ static void save_if_interesting(void* mem, u32 len, u8 fault) {
       /* Keep only if there are new bits in the map, add to queue for
          future fuzing, etc. */
 
-      if (!(hnb = has_new_bits())) return;
+      if (!(hnb = has_new_bits(virgin_bits))) return;
 
       fn = alloc_printf("%s/queue/id:%06u,%s", out_dir, queued_paths,
                         describe_op(hnb));
@@ -1856,39 +1832,30 @@ static void save_if_interesting(void* mem, u32 len, u8 fault) {
 
     case FAULT_HANG:
 
-      /* Hangs are not very interesting, so we just keep several
-         samples per location and only a modest number of locations
-         to boot. */
+      /* Hangs are not very interesting, but we're still obliged to keep
+         a handful of samples. We use the presence of new bits in the
+         hang-specific bitmap as a signal of uniqueness. In "dumb" mode, we
+         just keep everything. */
+
+      total_hangs++;
 
       if (unique_hangs >= KEEP_UNIQUE_HANG) return;
 
       if (!dumb_mode) {
+
         simplify_trace(trace_bits);
-        hash = hash32(trace_bits, MAP_SIZE, 0xa5be5705);
-      }
 
-      dir = alloc_printf("%s/hangs/hash:%08x", out_dir, hash);
-
-      total_hangs++;
-
-      if (!mkdir(dir, 0700) || dumb_mode) {
-
-        unique_hangs++;
-        last_hang_time = get_cur_time();
-
-      } else {
-
-        if (check_update_count(dir)) {
-          ck_free(dir);
-          return;
-        }
+        if (!has_new_bits(virgin_hang)) return;
 
       }
 
-      fn = alloc_printf("%s/id:%06llu,%s", dir, total_hangs,
-                        describe_op(0));
+      fn = alloc_printf("%s/hangs/id:%06llu,%s", out_dir,
+                        unique_hangs, describe_op(0));
 
-      ck_free(dir);
+      unique_hangs++;
+
+      last_hang_time = get_cur_time();
+
       break;
 
     case FAULT_CRASH:
@@ -1896,38 +1863,27 @@ static void save_if_interesting(void* mem, u32 len, u8 fault) {
       /* This is handled in a manner roughly similar to hangs,
          except for slightly different limits. */
 
-      if (unique_crashes >= KEEP_UNIQUE_CRASH) return;
-
-      if (!total_crashes) write_crash_readme();
-
-      if (!dumb_mode) {
-        simplify_trace(trace_bits);
-        hash = hash32(trace_bits, MAP_SIZE, 0xa5be5705);
-      }
-
-      dir = alloc_printf("%s/crashes/sig:%02u,hash:%08x", out_dir,
-                         kill_signal, hash);
-
       total_crashes++;
 
-      if (!mkdir(dir, 0700) || dumb_mode) {
- 
-        unique_crashes++;
-        last_crash_time = get_cur_time();
+      if (unique_crashes >= KEEP_UNIQUE_CRASH) return;
 
-      } else {
+      if (!dumb_mode) {
 
-        if (check_update_count(dir)) {
-          ck_free(dir);
-          return;
-        }
+        simplify_trace(trace_bits);
+
+        if (!has_new_bits(virgin_crash)) return;
 
       }
 
-      fn = alloc_printf("%s/id:%06llu,%s", dir, total_crashes,
-                        describe_op(0));
+      if (!unique_crashes) write_crash_readme();
 
-      ck_free(dir);
+      fn = alloc_printf("%s/crashes/id:%06llu,sig:%02u,%s", out_dir,
+                        unique_crashes, kill_signal, describe_op(0));
+
+      unique_crashes++;
+
+      last_crash_time = get_cur_time();
+
       break;
 
     case FAULT_ERROR: FATAL("Unable to execute target application");
@@ -2385,6 +2341,8 @@ static u8 trim_case(char** argv, struct queue_entry* q, u8* in_buf) {
 
   stage_name = tmp;
 
+  bytes_trim_in += q->len;
+
   write_to_testcase(in_buf, q->len);
   fault = run_target(argv);
   trim_execs++;
@@ -2392,8 +2350,6 @@ static u8 trim_case(char** argv, struct queue_entry* q, u8* in_buf) {
   if (stop_soon || fault) goto abort_trimming;
 
   cksum = hash32(trace_bits, MAP_SIZE, 0xa5b35705);
-
-  bytes_trim_in += q->len;
 
   /* Select initial chunk len, starting with large steps. */
 
