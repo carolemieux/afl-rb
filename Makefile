@@ -14,7 +14,7 @@
 #
 
 PROGNAME    = afl
-VERSION     = 0.53b
+VERSION     = 0.54b
 
 BIN_PATH    = /usr/local/bin
 HELPER_PATH = /usr/local/lib/afl
@@ -24,7 +24,7 @@ PROGS       = afl-gcc afl-as afl-fuzz afl-showmap
 CFLAGS     += -O3 -Wall -D_FORTIFY_SOURCE=2 -g -Wno-pointer-sign \
 	      -DAFL_PATH=\"$(HELPER_PATH)\" -DVERSION=\"$(VERSION)\"
 
-ifneq "$(HOSTNAME)" "raccoon"
+ifneq "$(shell echo $$HOSTNAME)" "raccoon"
   CFLAGS   += -Wno-format
 endif
 
