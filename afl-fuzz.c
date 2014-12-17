@@ -58,6 +58,7 @@
 #  include <sys/sysctl.h>
 #endif /* __APPLE__ || __FreeBSD__ || __OpenBSD__ */
 
+
 /* Lots of globals, but mostly for the status UI and other things where it
    really makes no sense to haul them around as function parameters. */
 
@@ -1795,7 +1796,7 @@ static void perform_dry_run(char** argv) {
 
     if (stop_soon) return;
 
-    if (res == crash_mode)
+    if (res == crash_mode || res == FAULT_NOBITS)
       SAYF(cGRA "    len = %u, map size = %u, exec speed = %llu us\n" cRST, 
            q->len, q->bitmap_size, q->exec_us);
 
@@ -1888,6 +1889,36 @@ static void perform_dry_run(char** argv) {
 }
 
 
+/* Helper function: link() if possible, copy otherwise. */
+
+static void link_or_copy(u8* old_path, u8* new_path) {
+
+  s32 i = link(old_path, new_path);
+  s32 sfd, dfd;
+  u8* tmp;
+
+  if (!i) return;
+  if (errno != EXDEV) PFATAL("link() failed");
+
+  sfd = open(old_path, O_RDONLY);
+  if (sfd < 0) PFATAL("Unable to open '%s'", old_path);
+
+  dfd = open(new_path, O_WRONLY | O_CREAT | O_EXCL, 0600);
+  if (dfd < 0) PFATAL("Unable to create '%s'", new_path);
+
+  tmp = ck_alloc(64 * 1024);
+
+  while ((i = read(sfd, tmp, 64 * 1024)) > 0) 
+    if (write(dfd, tmp, i) != i) PFATAL("Short write to '%s'", new_path);
+
+  if (i < 0) PFATAL("read() failed");
+
+  close(sfd);
+  close(dfd);
+
+}
+
+
 /* Create hard links for input test cases in the output directory, choosing
    good names and pivoting accordingly. */
 
@@ -1944,7 +1975,7 @@ static void pivot_inputs(void) {
 
     /* Pivot to the new queue entry. */
 
-    if (link(q->fname, nfn)) PFATAL("link() failed");
+    link_or_copy(q->fname, nfn);
     ck_free(q->fname);
     q->fname = nfn;
 
