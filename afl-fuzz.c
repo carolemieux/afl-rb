@@ -1898,7 +1898,6 @@ static void link_or_copy(u8* old_path, u8* new_path) {
   u8* tmp;
 
   if (!i) return;
-  if (errno != EXDEV) PFATAL("link() failed");
 
   sfd = open(old_path, O_RDONLY);
   if (sfd < 0) PFATAL("Unable to open '%s'", old_path);
@@ -1913,6 +1912,7 @@ static void link_or_copy(u8* old_path, u8* new_path) {
 
   if (i < 0) PFATAL("read() failed");
 
+  ck_free(tmp);
   close(sfd);
   close(dfd);
 
