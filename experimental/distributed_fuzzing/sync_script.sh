@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/bin/sh
 #
 # american fuzzy lop - path minimization tool
 # -------------------------------------------
@@ -39,7 +39,12 @@ FUZZ_USER=bob
 SYNC_DIR='/home/bob/sync_dir'
 
 # Interval (seconds) between sync attempts
-SYNC_INTERVAL=$[30 * 60]
+SYNC_INTERVAL=$((30 * 60))
+
+if [ "$PWD" = "/tmp" -o "$PWD" = "/var/tmp" ]; then
+  echo "Error: do not use shared /tmp or /var/tmp directories with this script." 1>&2
+  exit 1
+fi
 
 rm -rf .sync_tmp 2>/dev/null
 mkdir .sync_tmp || exit 1

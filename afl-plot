@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/bin/sh
 #
 # american fuzzy lop - Advanced Persistent Graphing
 # -------------------------------------------------
@@ -34,6 +34,19 @@ you should be able to view it with any web browser of your choice.
 
 _EOF_
 
+  exit 1
+
+fi
+
+echo "$1" | grep -qE '^(|/var)/tmp/'
+T1="$?"
+
+echo "$2" | grep -qE '^(|/var)/tmp/'
+T2="$?"
+
+if [ "$T1" = "0" -o "$T2" = "0" ]; then
+
+  echo "Error: do not use shared /tmp or /var/tmp directories with this script." 1>&2
   exit 1
 
 fi

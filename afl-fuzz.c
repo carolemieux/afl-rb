@@ -1128,7 +1128,7 @@ static void read_testcases(void) {
 
     /* This also takes care of . and .. */
 
-    if (!S_ISREG(st.st_mode) || !st.st_size) {
+    if (!S_ISREG(st.st_mode) || !st.st_size || strstr(fn, "/README.txt")) {
 
       ck_free(fn);
       ck_free(dfn);
@@ -1240,7 +1240,7 @@ static void load_extras(u8* dir) {
 
   qsort(extras, extras_cnt, sizeof(struct extra_data), compare_extras);
 
-  OKF("Loaded %u extra tokens, size range %s to %s.\n", extras_cnt,
+  OKF("Loaded %u extra tokens, size range %s to %s.", extras_cnt,
       DMS(min_len), DMS(max_len));
 
   if (max_len > 32)
@@ -1736,7 +1736,7 @@ static void show_stats(void);
    new paths are discovered to detect variable behavior and so on. */
 
 static u8 calibrate_case(char** argv, struct queue_entry* q, u8* use_mem,
-                         u32 handicap) {
+                         u32 handicap, u8 from_queue) {
 
   u8  fault = 0, new_bits = 0, var_detected = 0, first_run = (q->exec_cksum == 0);
   u64 start_us, stop_us;
@@ -1744,13 +1744,13 @@ static u8 calibrate_case(char** argv, struct queue_entry* q, u8* use_mem,
   s32 old_sc = stage_cur, old_sm = stage_max, old_tmout = exec_tmout;
   u8* old_sn = stage_name;
 
-  /* Be a bit more generous about timeouts at this point; otherwise, when
-     resuming fuzzing jobs where some test cases just barely sneaked under
-     the limit, we'd see intermittent hard errors when processing the input
-     dir. */
+  /* Be a bit more generous about timeouts when resuming sessions, or when
+     trying to calibrate already-added finds. This helps avoid trouble due
+     to intermittent latency. */
 
-  if (timeout_given)
-    exec_tmout = exec_tmout * CAL_TMOUT_PERC / 100;
+  if (!from_queue || resuming_fuzz)
+    exec_tmout = MAX(exec_tmout + CAL_TMOUT_ADD,
+                     exec_tmout * CAL_TMOUT_PERC / 100);
 
   q->cal_failed = 1;
 
@@ -1891,7 +1891,7 @@ static void perform_dry_run(char** argv) {
 
     close(fd);
 
-    res = calibrate_case(argv, q, use_mem, 0);
+    res = calibrate_case(argv, q, use_mem, 0, 1);
     ck_free(use_mem);
 
     if (stop_soon) return;
@@ -2214,7 +2214,7 @@ static u8 save_if_interesting(char** argv, void* mem, u32 len, u8 fault) {
     /* Try to calibrate inline; this also calls update_bitmap_score() when
        successful. */
 
-    res = calibrate_case(argv, queue_top, mem, queue_cycle - 1);
+    res = calibrate_case(argv, queue_top, mem, queue_cycle - 1, 0);
 
     if (res == FAULT_ERROR)
       FATAL("Unable to execute target application");
@@ -3148,7 +3148,7 @@ static void show_init_stats(void) {
   if (!timeout_given) {
 
     /* Figure out the appropriate timeout. The basic idea is: 5x average or
-       1x max, plus 50 ms. */
+       1x max, plus 50 ms, rounded down to 50 ms and capped at 1 second. */
 
     exec_tmout = 50 + MAX(avg_us * 5 / 1000, max_us / 1000);
     exec_tmout = exec_tmout / 50 * 50;
@@ -3479,8 +3479,8 @@ static u8 fuzz_one(char** argv) {
 
     /* Otherwise, still possibly skip non-favored cases, albeit less often. */
 
-    if (!queue_cur->favored && queued_paths > 10 &&
-        UR(100) < SKIP_NFAV_PROB) return 1;
+    if (!queue_cur->favored && queued_paths > 10 && UR(100) < SKIP_NFAV_PROB)
+      return 1;
 
   }
 
@@ -3521,7 +3521,7 @@ static u8 fuzz_one(char** argv) {
 
     u8 res;
 
-    res = calibrate_case(argv, queue_cur, in_buf, queue_cycle - 1);
+    res = calibrate_case(argv, queue_cur, in_buf, queue_cycle - 1, 0);
 
     if (res == FAULT_ERROR)
       FATAL("Unable to execute target application");
@@ -4141,7 +4141,7 @@ skip_interest:
       if (extras[j].len > len - i ||
           !memcmp(extras[j].data, out_buf + i, extras[j].len)) {
 
-        stage_max -= extras_cnt;
+        stage_max--;
         continue;
 
       }
@@ -4912,6 +4912,12 @@ static void check_binary(u8* fname) {
 
   if (getenv("AFL_SKIP_CHECKS")) return;
 
+  /* Check for blatant user errors. */
+
+  if ((!strncmp(target_path, "/tmp/", 5) && !strchr(target_path + 5, '/')) ||
+      (!strncmp(target_path, "/var/tmp/", 9) && !strchr(target_path + 9, '/')))
+     FATAL("Please don't keep binaries in /tmp or /var/tmp");
+
   fd = open(target_path, O_RDONLY);
 
   if (fd < 0) PFATAL("Unable to open '%s'", target_path);
@@ -5030,7 +5036,7 @@ static void check_terminal(void) {
          "    resize the window by dragging its edges, or to adjust the dimensions in\n"
          "    the settings menu.\n");
 
-    FATAL("Please resize terminal to 80x25");
+    FATAL("Please resize terminal to 80x25 or more");
 
   }
 
@@ -5059,7 +5065,7 @@ static void usage(u8* argv0) {
 
        "  -d            - quick & dirty mode (skips deterministic steps)\n"
        "  -n            - fuzz without instrumentation (dumb mode)\n"
-       "  -x dir        - directory with an optional fuzzer dictionary\n\n"
+       "  -x dir        - optional fuzzer dictionary (see README)\n\n"
 
        "Other stuff:\n\n"
 
@@ -5634,8 +5640,11 @@ int main(int argc, char** argv) {
            to mutate it without rediscovering any of the test cases already
            found during an earlier run.
 
-           You need to point -B to the fuzz_bitmap produced by an earlier run
-           for the exact same binary... and that's it. */
+           To use this mode, you need to point -B to the fuzz_bitmap produced
+           by an earlier run for the exact same binary... and that's it.
+
+           I only used this once or twice to get variants of a particular
+           file, so I'm not making this an official setting. */
 
         in_bitmap = optarg;
         read_bitmap(in_bitmap);

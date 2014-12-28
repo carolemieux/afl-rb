@@ -6,6 +6,86 @@ is 0.90b. If you're stuck on an earlier release, it's strongly advisable
 to download a newer build.
 
 --------------
+Version 1.05b:
+--------------
+
+  - Added a dictionary for WebP.
+
+  - Made some additional performance improvements to minimize_corpus.sh.
+
+--------------
+Version 1.04b:
+--------------
+
+  - Made substantial performance improvements to minimize_corpus.sh with
+    large datasets, albeit at the expense of having to switch back to bash
+    (other shells may have limits on array sizes, etc).
+
+  - Tweaked afl-showmap to support the format used by the new script.
+
+--------------
+Version 1.03b:
+--------------
+
+  - Added code to skip README.txt in the input directory to make the crash
+    exploration mode work better. Suggested by Jakub Wilk.
+
+  - Added a dictionary for SQLite.
+
+--------------
+Version 1.02b:
+--------------
+
+  - Reverted the ./ search path in minimize_corpus.sh because people did
+    not like it.
+
+  - Added very explicit warnings not to run various shell scripts that
+    read or write to /tmp/ (since this is generally a pretty bad idea on
+    multi-user systems).
+
+  - Added a check for /tmp binaries and -f locations in afl-fuzz.
+
+--------------
+Version 1.01b:
+--------------
+
+  - Added dictionaries for XML and GIF.
+
+--------------
+Version 1.00b:
+--------------
+
+  - Slightly improved the performance of minimize_corpus.sh, especially on
+    Linux.
+
+  - Made a couple of improvements to calibration timeouts for resumed scans.
+
+--------------
+Version 0.99b:
+--------------
+
+  - Fixed minimize_corpus.sh to work with dash, as suggested by Jakub Wilk.
+
+  - Modified minimize_corpus.sh to try locate afl-showmap in $PATH and ./.
+    The first part requested by Jakub Wilk.
+
+  - Added support for afl-as --version, as required by one funky build
+    script. Reported by William Robinet.
+
+--------------
+Version 0.98b:
+--------------
+
+  - Added a dictionary for TIFF.
+
+  - Fixed another cosmetic snafu with stage exec counts for -x.
+
+  - Switched afl-plot to /bin/sh, since it seems bashism-free. Also tried
+    to remove any obvious bashisms from other experimental/ scripts,
+    most notably including minimize_corpus.sh and triage_crashes.sh.
+    Requested by Jonathan Gray.
+
+--------------
 Version 0.97b:
 --------------
 

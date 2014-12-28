@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 #
 # american fuzzy lop - corpus minimization tool
 # ---------------------------------------------
@@ -34,7 +34,6 @@
 echo "corpus minimization tool for afl-fuzz by <lcamtuf@google.com>"
 echo
 
-ulimit -v 100000
 
 if [ ! "$#" = "2" ]; then
   echo "Usage: $0 /path/to/corpus_dir /path/to/tested_binary" 1>&2
@@ -48,6 +47,20 @@ fi
 DIR="`echo "$1" | sed 's/\/$//'`"
 BIN="$2"
 
+echo "$DIR" | grep -qE '^(|/var)/tmp/'
+T1="$?"
+
+echo "$BIN" | grep -qE '^(|/var)/tmp/'
+T2="$?"
+
+echo "$PWD" | grep -qE '^(|/var)/tmp/'
+T3="$?"
+
+if [ "$T1" = "0" -o "$T2" = "0" -o "$T3" = "0" ]; then
+  echo "Error: do not use this script with /tmp or /var/tmp (it's just not safe)." 1>&2
+  exit 1
+fi
+
 if [ ! -f "$BIN" -o ! -x "$BIN" ]; then
   echo "Error: binary '$2' not found or is not executable." 1>&2
   exit 1
@@ -58,16 +71,21 @@ if [ ! -d "$DIR" ]; then
   exit 1
 fi
 
-test "$AFL_PATH" = "" && AFL_PATH=/usr/local/bin
+# Try to find afl-showmap somewhere...
 
-SM="$AFL_PATH/afl-showmap"
+if [ "$AFL_PATH" = "" ]; then
+  SM=`which afl-showmap 2>/dev/null`
+  test "$SM" = "" && SM="/usr/local/bin/afl-showmap"
+else
+  SM="$AFL_PATH/afl-showmap"
+fi
 
 if [ ! -x "$SM" ]; then
-  echo "Can't find $SM - please set AFL_PATH."
+  echo "Can't find 'afl-showmap' - please set AFL_PATH."
   exit 1
 fi
 
-CCOUNT=`ls -- "$DIR" 2>/dev/null | wc -l`
+CCOUNT=$((`ls -- "$DIR" 2>/dev/null | wc -l`))
 
 if [ "$CCOUNT" = "0" ]; then
   echo "No inputs in the target directory - nothing to be done."
@@ -86,43 +104,65 @@ fi
 rm -rf -- "$OUT_DIR" 2>/dev/null
 mkdir "$OUT_DIR" || exit 1
 
-echo "[*] Evaluating $CCOUNT input files (this may take a while)..."
+if [ -d "$DIR/queue" ]; then
+  DIR="$DIR/queue"
+fi
+
+echo "[*] Obtaining traces for input files in '$DIR'..."
+
+(
+
+  CUR=0
+
+  ulimit -v 100000 2>/dev/null
+  ulimit -d 100000 2>/dev/null
+
+  for fn in `ls "$DIR"`; do
+
+    CUR=$((CUR+1))
+    printf "\\r    Processing file $CUR/$CCOUNT... "
+
+    # Modify this if $BIN needs to be called with additional parameters, etc.
+
+    AFL_MINIMIZE_MODE=1 "$SM" "$BIN" <"$DIR/$fn" >".traces/$fn" 2>&1
+
+  done
+
+)
+
+echo
+echo "[*] Sorting trace sets (this may take a while)..."
+
+# Sort all tuples by popularity across all datasets. The reasoning here is that
+# we need to start by adding the traces for least-popular tuples anyway (we have
+# little or no choice), and we can take care of the rest in some smarter way.
+
+ls "$DIR" | sed 's/^/.traces\//' | xargs -n 1 cat | sort | \
+  uniq -c | sort -n >.traces/.all_uniq
+
+TCOUNT=$((`grep -c . .traces/.all_uniq`))
+
+echo "[+] Found $TCOUNT unique tuples across $CCOUNT files."
+
+echo "[*] Finding best candidates for each tuple..."
 
 CUR=0
 
-for fn in `ls "$DIR"`; do
+for fn in `ls -rS "$DIR"`; do
 
-  CUR=$[CUR+1]
-  echo -ne "\\r    Processing file $CUR/$CCOUNT... "
+  CUR=$((CUR+1))
+  printf "\\r    Processing file $CUR/$CCOUNT... "
 
-  # Modify this if $BIN needs to be called with additional parameters, etc.
+  for tuple in `cat ".traces/$fn"`; do
 
-  AFL_SINK_OUTPUT=1 AFL_QUIET=1 "$SM" "$BIN" <"$DIR/$fn" >".traces/$fn" 2>&1
+    BEST_FILE[tuple]="${BEST_FILE[tuple]:-$fn}"
 
-  FSIZE=`wc -c <"$DIR/$fn"`
-
-  cat ".traces/$fn" >>.traces/.all
-  awk '{print "'$[FSIZE]'~" $0 "~'"$fn"'"}' <".traces/$fn" >>.traces/.lookup
+  done
 
 done
 
 echo
-echo "[*] Sorting trace sets..."
-
-# Find the least common tuples; let's start with ones that have just one
-# or a couple test cases, since we probably won't be able to avoid these
-# test cases no matter how hard we try.
-
-sort .traces/.all | uniq -c | sort -n >.traces/.all_uniq
-
-# Prepare a list of files for each tuple, smallest first.
-
-sort -n .traces/.lookup >.traces/.lookup_sorted
-
-TCOUNT=`grep -c . .traces/.all_uniq`
-
-echo "[+] Found $TCOUNT unique tuples across $CCOUNT files."
-echo "[*] Minimizing..."
+echo "[*] Processing candidates and writing output files..."
 
 touch .traces/.already_have
 
@@ -130,20 +170,23 @@ CUR=0
 
 while read -r cnt tuple; do
 
-  CUR=$[CUR+1]
-  echo -ne "\\r    Processing tuple $CUR/$TCOUNT... "
+  CUR=$((CUR+1))
+  printf "\\r    Processing tuple $CUR/$TCOUNT... "
 
   # If we already have this tuple, skip it.
 
   grep -q "^$tuple\$" .traces/.already_have && continue
 
-  # Find the best (smallest) candidate for this tuple.
+  FN=${BEST_FILE[tuple]}
 
-  FN=`grep "~$tuple~" .traces/.lookup_sorted | head -1 | cut -d~ -f3-`
+  ln "$DIR/$FN" "$OUT_DIR/$FN"
 
-  cat "$DIR/$FN" >"$OUT_DIR/$FN"
-  cat ".traces/$FN" ".traces/.already_have" | sort -u >.traces/.tmp
-  mv -f .traces/.tmp .traces/.already_have
+  if [ "$((CUR % 5))" = "0" ]; then
+    cat ".traces/$FN" ".traces/.already_have" | sort -u >.traces/.tmp
+    mv -f .traces/.tmp .traces/.already_have
+  else
+    cat ".traces/$FN" >>".traces/.already_have"
+  fi
 
 done <.traces/.all_uniq
 
