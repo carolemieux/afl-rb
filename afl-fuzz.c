@@ -1886,7 +1886,12 @@ static u8 run_target(char** argv) {
 
   child_timed_out = 0;
 
+  /* After this memset, trace_bits[] are effectively volatile, so we
+     must prevent any earlier operations from venturing into that
+     territory. */
+
   memset(trace_bits, 0, MAP_SIZE);
+  MEM_BARRIER();
 
   /* If we're running in "dumb" mode, we can't rely on the fork server
      logic compiled into the target program, so we will just keep calling
@@ -2021,6 +2026,12 @@ static u8 run_target(char** argv) {
   setitimer(ITIMER_REAL, &it, NULL);
 
   total_execs++;
+
+  /* Any subsequent operations on trace_bits must not be moved by the
+     compiler above this point. Past this location, trace_bits[] behave
+     very normally and do not have to be treated as volatile. */
+
+  MEM_BARRIER();
 
   tb4 = *(u32*)trace_bits;
 
@@ -3947,7 +3958,7 @@ static u32 choose_block_len(u32 limit) {
 
   u32 min_value, max_value;
 
-  switch (UR(3)) {
+  switch (UR(MIN(queue_cycle, 3))) {
 
     case 0:  min_value = 1;
              max_value = HAVOC_BLK_SMALL;
