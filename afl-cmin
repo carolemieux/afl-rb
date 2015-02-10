@@ -49,7 +49,7 @@ echo
 MEM_LIMIT=100
 TIMEOUT=none
 
-unset IN_DIR OUT_DIR STDIN_FILE EXTRA_PAR MEM_LIMIT_GIVEN
+unset IN_DIR OUT_DIR STDIN_FILE EXTRA_PAR MEM_LIMIT_GIVEN AFL_CRASHES_ONLY
 
 while getopts "+i:o:f:m:t:eQ" opt; do
 
@@ -74,6 +74,9 @@ while getopts "+i:o:f:m:t:eQ" opt; do
          ;;
     "e")
          EXTRA_PAR="$EXTRA_PAR -e"
+         ;;
+    "C")
+         export AFL_CRASHES_ONLY=1
          ;;
     "Q")
          EXTRA_PAR="$EXTRA_PAR -Q"
@@ -110,6 +113,7 @@ Execution control settings:
 
 Minimization settings:
 
+  -C            - keep crashing inputs, reject everything else
   -e            - solve for edge coverage only, ignore hit counts
 
 For additional tips, please consult docs/README.

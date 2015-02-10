@@ -4,7 +4,7 @@
 
    Written and maintained by Michal Zalewski <lcamtuf@google.com>
 
-   Copyright 2015 Google Inc. All rights reserved.
+   Copyright 2013, 2014, 2015 Google Inc. All rights reserved.
 
    Licensed under the Apache License, Version 2.0 (the "License");
    you may not use this file except in compliance with the License.
@@ -155,6 +155,7 @@ static u32 write_results(void) {
   s32 fd;
   FILE* f;
   u32 i, ret = 0;
+  u8  co = !!getenv("AFL_CRASHES_ONLY");
 
   if (!strncmp(out_file,"/dev/", 5)) {
 
@@ -180,9 +181,10 @@ static u32 write_results(void) {
 
     if (cmin_mode) {
 
-      if (!child_timed_out && 
-          (!child_crashed || getenv("AFL_KEEP_CRASHES")))
-        fprintf(f, "%u%u\n", trace_bits[i], i);
+      if (child_timed_out) continue;
+      if (child_crashed != co) continue;
+
+      fprintf(f, "%u%u\n", trace_bits[i], i);
 
     } else fprintf(f, "%06u:%u\n", i, trace_bits[i]);
 
