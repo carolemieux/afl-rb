@@ -51,7 +51,7 @@ TIMEOUT=none
 
 unset IN_DIR OUT_DIR STDIN_FILE EXTRA_PAR MEM_LIMIT_GIVEN AFL_CRASHES_ONLY
 
-while getopts "+i:o:f:m:t:eQ" opt; do
+while getopts "+i:o:f:m:t:eQC" opt; do
 
   case "$opt" in 
 
