@@ -155,7 +155,8 @@ static u32 write_results(void) {
   s32 fd;
   FILE* f;
   u32 i, ret = 0;
-  u8  co = !!getenv("AFL_CRASHES_ONLY");
+  u8  cco = !!getenv("AFL_CMIN_CRASHES_ONLY"),
+      caa = !!getenv("AFL_CMIN_ALLOW_ANY");
 
   if (!strncmp(out_file,"/dev/", 5)) {
 
@@ -181,8 +182,8 @@ static u32 write_results(void) {
 
     if (cmin_mode) {
 
-      if (child_timed_out) continue;
-      if (child_crashed != co) continue;
+      if (child_timed_out) break;
+      if (!caa && child_crashed != cco) break;
 
       fprintf(f, "%u%u\n", trace_bits[i], i);
 
@@ -572,7 +573,7 @@ int main(int argc, char** argv) {
 
   doc_path = access(DOC_PATH, F_OK) ? "docs" : DOC_PATH;
 
-  while ((opt = getopt(argc,argv,"+o:m:t:A:eqCQ")) > 0)
+  while ((opt = getopt(argc,argv,"+o:m:t:A:eqZQ")) > 0)
 
     switch (opt) {
 
@@ -643,7 +644,7 @@ int main(int argc, char** argv) {
         quiet_mode = 1;
         break;
 
-      case 'C':
+      case 'Z':
 
         /* This is an undocumented option to write data in the syntax expected
            by afl-cmin. Nobody else should have any use for this. */
