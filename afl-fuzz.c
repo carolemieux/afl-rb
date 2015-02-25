@@ -1811,7 +1811,7 @@ static void init_forkserver(char** argv) {
            "      ( ulimit -Sd $[%llu << 10]; /path/to/fuzzed_app )\n\n"
 #endif /* ^RLIMIT_AS */
 
-           "      Tip: you can use ppvm (http://jwilk.net/software/ppvm) to quickly\n"
+           "      Tip: you can use http://jwilk.net/software/recidivm to quickly\n"
            "      estimate the required amount of virtual memory for the binary.\n\n"
 
            "    - The binary is just buggy and explodes entirely on its own. If so, you\n"
@@ -1869,7 +1869,7 @@ static void init_forkserver(char** argv) {
          "      ( ulimit -Sd $[%llu << 10]; /path/to/fuzzed_app )\n\n"
 #endif /* ^RLIMIT_AS */
 
-         "      Tip: you can use ppvm (http://jwilk.net/software/ppvm) to quickly\n"
+         "      Tip: you can use http://jwilk.net/software/recidivm to quickly\n"
          "      estimate the required amount of virtual memory for the binary.\n\n"
 
          "    - Less likely, there is a horrible bug in the fuzzer. If other options\n"
@@ -2387,7 +2387,7 @@ static void perform_dry_run(char** argv) {
                "      ( ulimit -Sd $[%llu << 10]; /path/to/binary [...] <testcase )\n\n"
 #endif /* ^RLIMIT_AS */
 
-               "      Tip: you can use ppvm (http://jwilk.net/software/ppvm) to quickly\n"
+               "      Tip: you can use http://jwilk.net/software/recidivm to quickly\n"
                "      estimate the required amount of virtual memory for the binary. Also,\n"
                "      if you are using ASAN, see %s/notes_for_asan.txt.\n\n"
 
@@ -6238,8 +6238,15 @@ static void setup_dirs_fds(void) {
 
   } else {
 
+    static s32 out_dir_fd;
+
     if (in_place_resume)
       FATAL("Resume attempted but old output directory not found");
+
+    out_dir_fd = open(out_dir, O_RDONLY);
+
+    if (out_dir_fd < 0 || flock(out_dir_fd, LOCK_EX | LOCK_NB))
+      PFATAL("Unable to flock() output directory.");
 
   }
 
