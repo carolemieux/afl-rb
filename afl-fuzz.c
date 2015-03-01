@@ -101,13 +101,14 @@ static u8  skip_deterministic,        /* Skip deterministic stages?       */
            run_over10m;               /* Run time over 10 minutes?        */
 
 static s32 out_fd,                    /* Persistent fd for out_file       */
-           dev_urandom_fd,            /* Persistent fd for /dev/urandom   */
-           dev_null_fd,               /* Persistent fd for /dev/null      */
+           dev_urandom_fd = -1,       /* Persistent fd for /dev/urandom   */
+           dev_null_fd = -1,          /* Persistent fd for /dev/null      */
            fsrv_ctl_fd,               /* Fork server control pipe (write) */
            fsrv_st_fd;                /* Fork server status pipe (read)   */
 
 static s32 forksrv_pid,               /* PID of the fork server           */
-           child_pid = -1;            /* PID of the fuzzed program        */
+           child_pid = -1,            /* PID of the fuzzed program        */
+           out_dir_fd = -1;           /* FD of the lock file              */
 
 static u8* trace_bits;                /* SHM with instrumentation bitmap  */
 
@@ -1689,7 +1690,6 @@ static void init_forkserver(char** argv) {
 
     }
 
-    close(dev_null_fd);
 
     /* Set up control and status pipes, close the unneeded original fds. */
 
@@ -1701,10 +1701,15 @@ static void init_forkserver(char** argv) {
     close(st_pipe[0]);
     close(st_pipe[1]);
 
+    close(out_dir_fd);
+    close(dev_null_fd);
+    close(dev_urandom_fd);
+    close(fileno(plot_file));
+
     /* This should improve performance a bit, since it stops the linker from
        doing extra work post-fork(). */
 
-    setenv("LD_BIND_NOW", "1", 0);
+    if (!getenv("LD_BIND_LAZY")) setenv("LD_BIND_NOW", "1", 0);
 
     /* Set sane defaults for ASAN if nothing else specified. */
 
@@ -1955,7 +1960,12 @@ static u8 run_target(char** argv) {
 
       }
 
+      /* On Linux, would be faster to use O_CLOEXEC. Maybe TODO. */
+
       close(dev_null_fd);
+      close(out_dir_fd);
+      close(dev_urandom_fd);
+      close(fileno(plot_file));
 
       /* Set sane defaults for ASAN if nothing else specified. */
 
@@ -2166,7 +2176,7 @@ static u8 calibrate_case(char** argv, struct queue_entry* q, u8* use_mem,
   /* Make sure the forkserver is up before we do anything, and let's not
      count its spin-up time toward binary calibration. */
 
-  if (!dumb_mode && !no_forkserver && !forksrv_pid)
+  if (dumb_mode != 1 && !no_forkserver && !forksrv_pid)
     init_forkserver(argv);
 
   start_us = get_cur_time_us();
@@ -3117,8 +3127,6 @@ static void maybe_delete_out_dir(void) {
   FILE* f;
   u8 *fn = alloc_printf("%s/fuzzer_stats", out_dir);
 
-  static s32 out_dir_fd;
-
   /* See if the output directory is locked. If yes, bail out. If not,
      create a lock that will persist for the lifetime of the process
      (this requires leaving the descriptor open).*/
@@ -3524,7 +3532,7 @@ static void show_stats(void) {
   SAYF(bVR bH bSTOP cCYA " cycle progress " bSTG bH20 bHB bH bSTOP cCYA
        " map coverage " bSTG bH bHT bH20 bH2 bH bVL "\n");
 
-  /* This gets funny becuse we want to print several variable-length variables
+  /* This gets funny because we want to print several variable-length variables
      together, but then cram them into a fixed-width field - so we need to
      put them in a temporary buffer first. */
 
@@ -4084,7 +4092,7 @@ static u32 calculate_score(struct queue_entry* q) {
   else if (q->exec_us * 2 < avg_exec_us) perf_score = 150;
 
   /* Adjust score based on bitmap size. The working theory is that better
-     coverage translates to better targets. Multipler from 0.25x to 3x. */
+     coverage translates to better targets. Multiplier from 0.25x to 3x. */
 
   if (q->bitmap_size * 0.3 > avg_bitmap_size) perf_score *= 3;
   else if (q->bitmap_size * 0.5 > avg_bitmap_size) perf_score *= 2;
@@ -4133,7 +4141,7 @@ static u32 calculate_score(struct queue_entry* q) {
 
 
 /* Take the current entry from the queue, fuzz it for a while. This
-   function is a tad too long... returns 0 if fuzzed successfuly, 1 if
+   function is a tad too long... returns 0 if fuzzed successfully, 1 if
    skipped or bailed out. */
 
 static u8 fuzz_one(char** argv) {
@@ -6237,8 +6245,6 @@ static void setup_dirs_fds(void) {
     maybe_delete_out_dir();
 
   } else {
-
-    static s32 out_dir_fd;
 
     if (in_place_resume)
       FATAL("Resume attempted but old output directory not found");
