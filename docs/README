@@ -276,14 +276,9 @@ magic headers, or other special tokens associated with the targeted data type
 
   http://lcamtuf.blogspot.com/2015/01/afl-fuzz-making-up-grammar-with.html
 
-To use this feature, place the tokens in a new directory, one per file; and then
-point the fuzzer to that directory via the -x option in the command line. One
-good example can be found in testcases/_extras/xml/; another useful reference
-point would be testcases/_extras/png/.
-
-Note that the tokens should be *extremely* short and correspond to the basic
-syntax units that the fuzzer will then clobber together in various ways;
-snippets between 2 and 16 bytes are the sweet spot in almost all cases.
+To use this feature, you first need to create a dictionary in one of the two
+formats discussed in testcases/README.testcases; and then point the fuzzer to
+it via the -x option in the command line.
 
 There is no way to provide more structured descriptions of the underlying
 syntax, but the fuzzer will likely figure out some of this based on the
