@@ -387,6 +387,9 @@ Here are some of the most important caveats for AFL:
     need to make simple code changes to make them behave in a more traditional
     way.
 
+  - AFL doesn't output human-readable coverage data. If you want to monitor
+    coverage, use afl-cov from Michael Rash: https://github.com/mrash/afl-cov
+
 Beyond this, see INSTALL for platform-specific tips.
 
 13) Special thanks
@@ -415,6 +418,7 @@ bug reports, or patches from:
   Sam Hakim                             Laszlo Szekeres
   David A. Wheeler                      Turo Lamminen
   Andreas Stieger                       Richard Godbee
+  Louis Dassy
 
 Thank you!
 

@@ -6782,7 +6782,7 @@ static void check_crash_handling(void) {
      until I get a box to test the code. So, for now, we check for crash
      reporting the awful way. */
   
-  if (system("launchctl bslist 2>/dev/null | grep -q '\\.ReportCrash$'")) return;
+  if (system("launchctl list 2>/dev/null | grep -q '\\.ReportCrash$'")) return;
 
   SAYF("\n" cLRD "[-] " cRST
        "Whoops, your system is configured to forward crash notifications to an\n"

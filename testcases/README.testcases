@@ -19,7 +19,6 @@ For example, there is a PNG file with and without a color profile.
 Additional test cases are always welcome; the current "most wanted" list
 includes:
 
-  - PDF,
   - JBIG,
   - Ogg Vorbis,
   - Ogg Theora,
