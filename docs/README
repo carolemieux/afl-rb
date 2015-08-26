@@ -13,6 +13,8 @@ american fuzzy lop
   To compare notes with other users or get notified about major new features,
   send a mail to <afl-users+subscribe@googlegroups.com>.
 
+  ** See QuickStartGuide.txt if you don't have time to read this file. **
+
 1) Challenges of guided fuzzing
 -------------------------------
 
@@ -427,7 +429,7 @@ bug reports, or patches from:
   Keegan McAllister                     Kostya Serebryany
   Richo Healey                          Martijn Bogaard
   rc0r                                  Jonathan Foote
-  Christian Holler
+  Christian Holler                      Dominique Pelle
 
 Thank you!
 
