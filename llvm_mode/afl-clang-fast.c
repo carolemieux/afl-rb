@@ -180,11 +180,12 @@ static void edit_params(u32 argc, char** argv) {
 
   cc_params[cc_par_cnt++] = "-D__AFL_LOOP(_A)="
     "({ static char _B[] __attribute__((used)) = \"" PERSIST_SIG "\"; "
-    "int __afl_persistent_loop(unsigned int); __afl_persistent_loop(_A); })";
+    "int __afl_persistent_loop(unsigned int, char*); "
+    "__afl_persistent_loop(_A, _B); })";
 
   cc_params[cc_par_cnt++] = "-D__AFL_INIT()="
     "do { static char _A[] __attribute__((used)) = \"" DEFER_SIG "\"; "
-    "void __afl_manual_init(void); __afl_manual_init(); } while (0)";
+    "void __afl_manual_init(char*); __afl_manual_init(_A); } while (0)";
 
   if (maybe_linking) {
 
