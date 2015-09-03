@@ -160,7 +160,7 @@ static void __afl_start_forkserver(void) {
 
 /* A simplified persistent mode handler, used as explained in README.llvm. */
 
-int __afl_persistent_loop(unsigned int max_cnt, char* dummy) {
+int __afl_persistent_loop(unsigned int max_cnt) {
 
   static u8  first_pass = 1;
   static u32 cycle_cnt;
@@ -186,7 +186,7 @@ int __afl_persistent_loop(unsigned int max_cnt, char* dummy) {
 /* This one can be called from user code when deferred forkserver mode
     is enabled. */
 
-void __afl_manual_init(char* dummy) {
+void __afl_manual_init(void) {
 
   static u8 init_done;
 
@@ -209,7 +209,7 @@ __attribute__((constructor(0))) void __afl_auto_init(void) {
 
   if (getenv(DEFER_ENV_VAR)) return;
 
-  __afl_manual_init(0);
+  __afl_manual_init();
 
 }
 

@@ -179,13 +179,16 @@ static void edit_params(u32 argc, char** argv) {
   cc_params[cc_par_cnt++] = "-D__AFL_HAVE_MANUAL_CONTROL=1";
 
   cc_params[cc_par_cnt++] = "-D__AFL_LOOP(_A)="
-    "({ static char _B[] __attribute__((used)) = \"" PERSIST_SIG "\"; "
-    "int __afl_persistent_loop(unsigned int, char*); "
-    "__afl_persistent_loop(_A, _B); })";
+    "({ static volatile char *_B __attribute__((used)); "
+    " _B = (char*)\"" PERSIST_SIG "\"; "
+    "int __afl_persistent_loop(unsigned int); "
+    "__afl_persistent_loop(_A); })";
 
   cc_params[cc_par_cnt++] = "-D__AFL_INIT()="
-    "do { static char _A[] __attribute__((used)) = \"" DEFER_SIG "\"; "
-    "void __afl_manual_init(char*); __afl_manual_init(_A); } while (0)";
+    "do { static volatile char *_A __attribute__((used)); "
+    " _A = (char*)\"" DEFER_SIG "\"; "
+    "void __afl_manual_init(void); "
+    "__afl_manual_init(); } while (0)";
 
   if (maybe_linking) {
 
