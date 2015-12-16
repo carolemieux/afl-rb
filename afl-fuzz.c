@@ -96,6 +96,7 @@ static u8  skip_deterministic,        /* Skip deterministic stages?       */
            auto_changed,              /* Auto-generated tokens changed?   */
            no_cpu_meter_red,          /* Feng shui on the status screen   */
            no_var_check,              /* Don't detect variable behavior   */
+           shuffle_queue,             /* Shuffle input queue?             */
            bitmap_changed = 1,        /* Time to update bitmap?           */
            qemu_mode,                 /* Running in QEMU mode?            */
            skip_requested,            /* Skip request, via SIGUSR1        */
@@ -331,6 +332,24 @@ static inline u32 UR(u32 limit) {
   }
 
   return random() % limit;
+
+}
+
+
+/* Shuffle an array of pointers. Might be slightly biased. */
+
+static void shuffle_ptrs(void** ptrs, u32 cnt) {
+
+  u32 i;
+
+  for (i = 0; i < cnt - 2; i++) {
+
+    u32 j = i + UR(cnt - i);
+    void *s = ptrs[i];
+    ptrs[i] = ptrs[j];
+    ptrs[j] = s;
+
+  }
 
 }
 
@@ -1276,6 +1295,13 @@ static void read_testcases(void) {
 
   }
 
+  if (shuffle_queue && nl_cnt > 1) {
+
+    ACTF("Shuffling queue...");
+    shuffle_ptrs((void**)nl, nl_cnt);
+
+  }
+
   for (i = 0; i < nl_cnt; i++) {
 
     struct stat st;
@@ -1523,7 +1549,7 @@ static void load_extras(u8* dir) {
 
   }
 
-  if (x) FATAL("Dictinary levels not supported for directories.");
+  if (x) FATAL("Dictionary levels not supported for directories.");
 
   while ((de = readdir(d))) {
 
@@ -2657,7 +2683,7 @@ static void perform_dry_run(char** argv) {
 
         useless_at_start++;
 
-        if (!in_bitmap)
+        if (!in_bitmap && !shuffle_queue)
           WARNF("No new instrumentation output, test case may be useless.");
 
         break;
@@ -7517,9 +7543,10 @@ int main(int argc, char** argv) {
 
   }
 
-  if (getenv("AFL_NO_FORKSRV"))   no_forkserver    = 1;
-  if (getenv("AFL_NO_CPU_RED"))   no_cpu_meter_red = 1;
-  if (getenv("AFL_NO_VAR_CHECK")) no_var_check     = 1;
+  if (getenv("AFL_NO_FORKSRV"))    no_forkserver    = 1;
+  if (getenv("AFL_NO_CPU_RED"))    no_cpu_meter_red = 1;
+  if (getenv("AFL_NO_VAR_CHECK"))  no_var_check     = 1;
+  if (getenv("AFL_SHUFFLE_QUEUE")) shuffle_queue    = 1;
 
   if (dumb_mode == 2 && no_forkserver)
     FATAL("AFL_DUMB_FORKSRV and AFL_NO_FORKSRV are mutually exclusive");
