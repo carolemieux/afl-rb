@@ -2255,7 +2255,7 @@ static u8 run_target(char** argv) {
     if ((res = read(fsrv_st_fd, &status, 4)) != 4) {
 
       if (stop_soon) return 0;
-      RPFATAL(res, "Unable to communicate with fork server");
+      RPFATAL(res, "Unable to communicate with fork server (OOM?)");
 
     }
 
@@ -3454,7 +3454,7 @@ static void maybe_delete_out_dir(void) {
            "    session, put '-' as the input directory in the command line ('-i -') and\n"
            "    try again.\n", OUTPUT_GRACE);
 
-       FATAL("At-risk data found in in '%s'", out_dir);
+       FATAL("At-risk data found in '%s'", out_dir);
 
     }
 

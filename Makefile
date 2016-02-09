@@ -14,7 +14,7 @@
 #
 
 PROGNAME    = afl
-VERSION     = 1.96b
+VERSION     = 1.97b
 
 PREFIX     ?= /usr/local
 BIN_PATH    = $(PREFIX)/bin
@@ -22,7 +22,7 @@ HELPER_PATH = $(PREFIX)/lib/afl
 DOC_PATH    = $(PREFIX)/share/doc/afl
 MISC_PATH   = $(PREFIX)/share/afl
 
-PROGS       = afl-gcc afl-as afl-fuzz afl-showmap afl-tmin afl-gotcpu
+PROGS       = afl-gcc afl-as afl-fuzz afl-showmap afl-tmin afl-gotcpu afl-analyze
 
 CFLAGS     ?= -O3 -funroll-loops
 CFLAGS     += -Wall -D_FORTIFY_SOURCE=2 -g -Wno-pointer-sign \
@@ -73,6 +73,9 @@ afl-showmap: afl-showmap.c $(COMM_HDR) | test_x86
 	$(CC) $(CFLAGS) $@.c -o $@ $(LDFLAGS)
 
 afl-tmin: afl-tmin.c $(COMM_HDR) | test_x86
+	$(CC) $(CFLAGS) $@.c -o $@ $(LDFLAGS)
+
+afl-analyze: afl-analyze.c $(COMM_HDR) | test_x86
 	$(CC) $(CFLAGS) $@.c -o $@ $(LDFLAGS)
 
 afl-gotcpu: afl-gotcpu.c $(COMM_HDR) | test_x86
