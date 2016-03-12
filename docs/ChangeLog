@@ -17,11 +17,20 @@ is 2.07b. If you're stuck on an earlier release, it's strongly advisable
 to get on with the times.
 
 --------------
+Version 2.08b:
+--------------
+
+  - Added explicit support for -m32 and -m64 for llvm_mode. Inspired by
+    a request from Christian Holler.
+
+  - Added a new benchmarking option, as requested by Kostya Serebryany.
+
+--------------
 Version 2.07b:
 --------------
 
-  - Added CPU affinity option (-Z) on FreeBSD and on Linux. With some caution,
-    this can offer a significant (20%+) performance bump and reduce jitter.
+  - Added CPU affinity option (-Z) on Linux. With some caution, this can
+    offer a significant (10%+) performance bump and reduce jitter.
     Proposed by Austin Seipp.
 
   - Updated afl-gotcpu to use CPU affinity where supported.

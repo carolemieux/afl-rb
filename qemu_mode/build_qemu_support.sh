@@ -6,7 +6,7 @@
 # Written by Andrew Griffiths <agriffiths@google.com> and
 #            Michal Zalewski <lcamtuf@google.com>
 #
-# Copyright 2015 Google Inc. All rights reserved.
+# Copyright 2015, 2016 Google Inc. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -124,6 +124,8 @@ patch -p0 <patches/syscall.diff || exit 1
 
 echo "[+] Patching done."
 
+ORIG_CPU_TARGET="$CPU_TARGET"
+
 test "$CPU_TARGET" = "" && CPU_TARGET="`uname -m`"
 test "$CPU_TARGET" = "i686" && CPU_TARGET="i386"
 
@@ -152,7 +154,7 @@ ls -l ../afl-qemu-trace || exit 1
 
 echo "[+] Successfully created '../afl-qemu-trace'."
 
-if [ "$CPU_TARGET" = "" ]; then
+if [ "$ORIG_CPU_TARGET" = "" ]; then
 
   echo "[*] Testing the build..."
 
