@@ -173,7 +173,7 @@ int main(int argc, char** argv) {
     if (waitpid(-1, &ret, 0) < 0) PFATAL("waitpid failed");
 
     if (WEXITSTATUS(ret) == 0) idle_cpus++;
-    if (WEXITSTATUS(ret) < 1) maybe_cpus++;
+    if (WEXITSTATUS(ret) <= 1) maybe_cpus++;
 
   }
 
