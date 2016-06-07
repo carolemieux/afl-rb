@@ -43,8 +43,6 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include <sys/time.h>
-
 static u8*  as_path;                /* Path to the AFL 'as' wrapper      */
 static u8** cc_params;              /* Parameters passed to the real CC  */
 static u32  cc_par_cnt = 1;         /* Param count, including argv0      */
@@ -264,19 +262,14 @@ static void edit_params(u32 argc, char** argv) {
 
     cc_params[cc_par_cnt++] = "-O3";
     cc_params[cc_par_cnt++] = "-funroll-loops";
+
+    /* Two indicators that you're building for fuzzing; one of them is
+       AFL-specific, the other is shared with libfuzzer. */
+
     cc_params[cc_par_cnt++] = "-D__AFL_COMPILER=1";
+    cc_params[cc_par_cnt++] = "-DFUZZING_BUILD_MODE_UNSAFE_FOR_PRODUCTION=1";
 
   }
-
-  cc_params[cc_par_cnt++] = alloc_printf("-D__AFL_WATCH(_V)="
-    "do { __attribute__((visibility(\"default\"))) "
-#ifdef __APPLE__
-    "extern unsigned char* _M __asm__(\"___afl_area_ptr\"); "
-#else
-    "extern unsigned char* _M __asm__(\"__afl_area_ptr\"); "
-#endif /* ^__APPLE__ */
-    "_M[(__LINE__ ^ %u) & %u] = (unsigned char)(_V); } while (0)",
-    (u32)R(MAP_SIZE), (u32)(MAP_SIZE - 1));
 
   cc_params[cc_par_cnt] = NULL;
 
@@ -286,10 +279,6 @@ static void edit_params(u32 argc, char** argv) {
 /* Main entry point */
 
 int main(int argc, char** argv) {
-
-  u32 rand_seed;
-  struct timeval tv;
-  struct timezone tz;
 
   if (isatty(2) && !getenv("AFL_QUIET")) {
 
@@ -315,9 +304,6 @@ int main(int argc, char** argv) {
 
   }
 
-  gettimeofday(&tv, &tz);
-  rand_seed = tv.tv_sec ^ tv.tv_usec ^ getpid();
-  srandom(rand_seed);
 
   find_as(argv[0]);
 
