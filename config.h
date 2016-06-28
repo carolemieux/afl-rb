@@ -19,6 +19,10 @@
 
 #include "types.h"
 
+/* Version string: */
+
+#define VERSION             "2.17b"
+
 /******************************************************
  *                                                    *
  *  Settings that may be of interest to power users:  *
