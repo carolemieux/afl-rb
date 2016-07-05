@@ -891,14 +891,13 @@ static inline u8 has_new_bits(u8* virgin_map) {
 
     if (unlikely(*current) && unlikely(*current & *virgin)) {
 
-      if (unlikely(ret < 2)) {
+      if (likely(ret < 2)) {
 
         u8* cur = (u8*)current;
         u8* vir = (u8*)virgin;
 
         /* Looks like we have not found any new bytes yet; see if any non-zero
            bytes in current[] are pristine in virgin[]. */
-
 
 #ifdef __x86_64__
 
@@ -5132,7 +5131,7 @@ static u8 fuzz_one(char** argv) {
   /* Effector map setup. These macros calculate:
 
      EFF_APOS      - position of a particular file offset in the map.
-     EFF_ALEN      - length of an map with a particular number of bytes.
+     EFF_ALEN      - length of n map with a particular number of bytes.
      EFF_SPAN_ALEN - map span for a sequence of bytes.
 
    */
@@ -7552,12 +7551,17 @@ int main(int argc, char** argv) {
   u8  *extras_dir = 0;
   u8  mem_limit_given = 0;
   u8  exit_1 = !!getenv("AFL_BENCH_JUST_ONE");
-
   char** use_argv;
+
+  struct timeval tv;
+  struct timezone tz;
 
   SAYF(cCYA "afl-fuzz " cBRI VERSION cRST " by <lcamtuf@google.com>\n");
 
   doc_path = access(DOC_PATH, F_OK) ? "docs" : DOC_PATH;
+
+  gettimeofday(&tv, &tz);
+  srandom(tv.tv_sec ^ tv.tv_usec ^ getpid());
 
   while ((opt = getopt(argc, argv, "+i:o:f:m:t:T:dnCB:S:M:x:Q")) > 0)
 
