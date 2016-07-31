@@ -169,18 +169,25 @@ int __afl_persistent_loop(unsigned int max_cnt) {
 
   if (first_pass) {
 
+    memset(__afl_area_ptr, 0, MAP_SIZE);
     cycle_cnt  = max_cnt;
     first_pass = 0;
     return 1;
 
   }
 
-  if (is_persistent && --cycle_cnt) {
+  if (is_persistent) {
 
-    raise(SIGSTOP);
-    return 1;
+    if (--cycle_cnt) {
 
-  } else return 0;
+      raise(SIGSTOP);
+      return 1;
+
+    } else __afl_area_ptr = __afl_area_initial;
+
+  }
+
+  return 0;
 
 }
 
