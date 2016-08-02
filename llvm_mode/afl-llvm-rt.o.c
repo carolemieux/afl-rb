@@ -169,7 +169,16 @@ int __afl_persistent_loop(unsigned int max_cnt) {
 
   if (first_pass) {
 
-    memset(__afl_area_ptr, 0, MAP_SIZE);
+    /* Make sure that every iteration of __AFL_LOOP() starts with a clean slate.
+       On subsequent calls, the parent will take care of that, but on the first
+       iteration, it's our job to erase any trace of whatever happened
+       before the loop. */
+
+    if (is_persistent) {
+      memset(__afl_area_ptr, 0, MAP_SIZE);
+      __afl_area_ptr[0] = 1;
+    }
+
     cycle_cnt  = max_cnt;
     first_pass = 0;
     return 1;
@@ -183,7 +192,15 @@ int __afl_persistent_loop(unsigned int max_cnt) {
       raise(SIGSTOP);
       return 1;
 
-    } else __afl_area_ptr = __afl_area_initial;
+    } else {
+
+      /* When exiting __AFL_LOOP(), make sure that the subsequent code that
+         follows the loop is not traced. We do that by pivoting back to the
+         dummy output region. */
+
+      __afl_area_ptr = __afl_area_initial;
+
+    }
 
   }
 
