@@ -189,11 +189,11 @@ temporary file can't be created in the current working directory.
 
 The library honors three environmental variables:
 
-  - AFL_LD_LIMIT_MB caps the size of the maximum allocation honored by the
-    library, in megabytes. The default value is 1 GB. Larger allocations
-    will behave as if the target binary ran out of memory.
+  - AFL_LD_LIMIT_MB caps the size of the maximum heap usage permitted by the
+    library, in megabytes. The default value is 1 GB. Once this is exceeded,
+    allocations will return NULL.
 
-  - AFL_LD_LIMIT_HARD alters the behavior by calling abort() on excessive
+  - AFL_LD_HARD_FAIL alters the behavior by calling abort() on excessive
     allocations, thus causing what AFL would perceive as a crash. Useful for
     programs that are supposed to maintain a specific memory footprint.
 

@@ -35,11 +35,13 @@
 
      - It checks for calloc() overflows and can cause soft or hard failures
        of alloc requests past a configurable memory limit (AFL_LD_LIMIT_MB,
-       AFL_LD_HARD_LIMIT).
+       AFL_LD_HARD_FAIL).
 
    Basically, it is inspired by some of the non-default options available
    for the OpenBSD allocator - see malloc.conf(5) on that platform for
-   reference.
+   reference. It is also somewhat similar to several other debugging
+   libraries, such as gmalloc and DUMA, but is simple, plug-and-play, and
+   designed specifically for fuzzing jobs.
 
    Note that it does nothing for stack-based memory handling errors. The
    -fstack-protector-all setting for GCC / clang, enabled when using
@@ -47,16 +49,23 @@
 
    The allocator is slow and memory-intensive (even the tiniest allocation
    uses up 4 kB of physical memory and 8 kB of virtual mem), making it
-   completely unsuitable for "production" uses; but it is faster and more
+   completely unsuitable for "production" uses; but it can be faster and more
    hassle-free than ASAN / MSAN when fuzzing small, self-contained binaries.
 
    To use this library, run AFL like so:
 
    AFL_LD_PRELOAD=/path/to/libdislocator.so ./afl-fuzz [...other params...]
 
-   It can be also used separately with any other fuzzer or testing tool.
+   You *have* to specify path, even if it's just ./libdislocator.so or
+   $PWD/libdislocator.so. On MacOS X, you may have to use DYLD_INSERT_LIBRARIES
+   instead of LD_PRELOAD.
 
-   Note that this will work only if the target binary is dynamically linked.
+   Similarly to afl-tmin, the library is not "proprietary" and can be
+   used with other fuzzers or testing tools without the need for any code
+   tweaks.
+
+   Note that the LD_PRELOAD approach will work only if the target binary is
+   dynamically linked.
 
  */
 
@@ -102,10 +111,11 @@
 
 /* Configurable stuff (use AFL_DISLOC_* to set): */
 
-static u32 max_alloc = MAX_ALLOC;	/* Maximum buffer size to accept    */
+static u32 max_mem = MAX_ALLOC;         /* Max heap usage to permit         */
 static u8  alloc_verbose,               /* Additional debug messages        */
-           hard_limit;                  /* abort() when max_alloc exceeded? */
+           hard_fail;                   /* abort() when max_mem exceeded?   */
 
+static __thread u64 total_mem;          /* Currently allocated mem          */
 
 /* This is the main alloc function. It allocates one page more than necessary,
    sets that tailing page to PROT_NONE, and then increments the return address
@@ -116,13 +126,13 @@ static void* __dislocator_alloc(size_t len) {
 
   void* ret;
 
-  if (len > max_alloc) {
+  if (total_mem + len > max_mem) {
 
-    if (hard_limit)
-      FATAL("request exceeds %u MB", max_alloc / 1024 / 1024);
+    if (hard_fail)
+      FATAL("total allocs exceed %u MB", max_mem / 1024 / 1024);
 
-    DEBUGF("request exceeds %u MB, returning NULL",
-           max_alloc / 1024 / 1024);
+    DEBUGF("total allocs exceed %u MB, returning NULL",
+           max_mem / 1024 / 1024);
 
     return NULL;
 
@@ -136,7 +146,10 @@ static void* __dislocator_alloc(size_t len) {
 
   if (ret == (void*)-1) {
 
-    DEBUGF("mmap() failed when allocating memory (OOM?)");
+    if (hard_fail) FATAL("mmap() failed on alloc (OOM?)");
+
+    DEBUGF("mmap() failed on alloc (OOM?)");
+
     return NULL;
 
   }
@@ -157,6 +170,8 @@ static void* __dislocator_alloc(size_t len) {
 
   PTR_L(ret) = len;
   PTR_C(ret) = ALLOC_CANARY;
+
+  total_mem += len;
 
   return ret;
 
@@ -179,7 +194,8 @@ void* calloc(size_t elem_len, size_t elem_cnt) {
 
   ret = __dislocator_alloc(len);
 
-  DEBUGF("calloc(%zu, %zu) = %p", elem_len, elem_cnt, ret);
+  DEBUGF("calloc(%zu, %zu) = %p [%llu total]", elem_len, elem_cnt, ret,
+         total_mem);
 
   return ret;
 
@@ -196,7 +212,7 @@ void* malloc(size_t len) {
 
   ret = __dislocator_alloc(len);
 
-  DEBUGF("malloc(%zu) = %p", len, ret);
+  DEBUGF("malloc(%zu) = %p [%llu total]", len, ret, total_mem);
 
   if (ret && len) memset(ret, ALLOC_CLOBBER, len);
 
@@ -220,6 +236,8 @@ void free(void* ptr) {
   if (PTR_C(ptr) != ALLOC_CANARY) FATAL("bad allocator canary on free()");
 
   len = PTR_L(ptr);
+
+  total_mem -= len;
 
   /* Protect everything. Note that the extra page at the end is already
      set as PROT_NONE, so we don't need to touch that. */
@@ -252,7 +270,7 @@ void* realloc(void* ptr, size_t len) {
 
   }
 
-  DEBUGF("realloc(%p, %zu) = %p", ptr, len, ret);
+  DEBUGF("realloc(%p, %zu) = %p [%llu total]", ptr, len, ret, total_mem);
 
   return ret;
 
@@ -265,12 +283,12 @@ __attribute__((constructor)) void __dislocator_init(void) {
 
   if (tmp) {
 
-    max_alloc = atoi(tmp) * 1024 * 1024;
-    if (!max_alloc) FATAL("Bad value for AFL_LD_LIMIT_MB");
+    max_mem = atoi(tmp) * 1024 * 1024;
+    if (!max_mem) FATAL("Bad value for AFL_LD_LIMIT_MB");
 
   }
 
   alloc_verbose = !!getenv("AFL_LD_VERBOSE");
-  hard_limit = !!getenv("AFL_LD_HARD_LIMIT");
+  hard_fail = !!getenv("AFL_LD_HARD_FAIL");
 
 }
