@@ -57,8 +57,7 @@
    AFL_LD_PRELOAD=/path/to/libdislocator.so ./afl-fuzz [...other params...]
 
    You *have* to specify path, even if it's just ./libdislocator.so or
-   $PWD/libdislocator.so. On MacOS X, you may have to use DYLD_INSERT_LIBRARIES
-   instead of LD_PRELOAD.
+   $PWD/libdislocator.so.
 
    Similarly to afl-tmin, the library is not "proprietary" and can be
    used with other fuzzers or testing tools without the need for any code
@@ -82,19 +81,29 @@
 #  define PAGE_SIZE 4096
 #endif /* !PAGE_SIZE */
 
+#ifndef MAP_ANONYMOUS
+#  define MAP_ANONYMOUS MAP_ANON
+#endif /* !MAP_ANONYMOUS */
+
 /* Error / message handling: */
 
 #define DEBUGF(_x...) do { \
     if (alloc_verbose) { \
-      fprintf(stderr, "[AFL] " _x); \
-      fprintf(stderr, "\n"); \
+      if (++call_depth == 1) { \
+        fprintf(stderr, "[AFL] " _x); \
+        fprintf(stderr, "\n"); \
+      } \
+      call_depth--; \
     } \
   } while (0)
 
 #define FATAL(_x...) do { \
-    fprintf(stderr, "*** [AFL] " _x); \
-    fprintf(stderr, " ***\n"); \
-    abort(); \
+    if (++call_depth == 1) { \
+      fprintf(stderr, "*** [AFL] " _x); \
+      fprintf(stderr, " ***\n"); \
+      abort(); \
+    } \
+    call_depth--; \
   } while (0)
 
 /* Macro to count the number of pages needed to store a buffer: */
@@ -115,7 +124,9 @@ static u32 max_mem = MAX_ALLOC;         /* Max heap usage to permit         */
 static u8  alloc_verbose,               /* Additional debug messages        */
            hard_fail;                   /* abort() when max_mem exceeded?   */
 
-static __thread u64 total_mem;          /* Currently allocated mem          */
+static __thread size_t total_mem;       /* Currently allocated mem          */
+
+static __thread u32 call_depth;         /* To avoid recursion via fprintf() */
 
 /* This is the main alloc function. It allocates one page more than necessary,
    sets that tailing page to PROT_NONE, and then increments the return address
@@ -194,7 +205,7 @@ void* calloc(size_t elem_len, size_t elem_cnt) {
 
   ret = __dislocator_alloc(len);
 
-  DEBUGF("calloc(%zu, %zu) = %p [%llu total]", elem_len, elem_cnt, ret,
+  DEBUGF("calloc(%zu, %zu) = %p [%zu total]", elem_len, elem_cnt, ret,
          total_mem);
 
   return ret;
@@ -212,7 +223,7 @@ void* malloc(size_t len) {
 
   ret = __dislocator_alloc(len);
 
-  DEBUGF("malloc(%zu) = %p [%llu total]", len, ret, total_mem);
+  DEBUGF("malloc(%zu) = %p [%zu total]", len, ret, total_mem);
 
   if (ret && len) memset(ret, ALLOC_CLOBBER, len);
 
@@ -270,7 +281,7 @@ void* realloc(void* ptr, size_t len) {
 
   }
 
-  DEBUGF("realloc(%p, %zu) = %p [%llu total]", ptr, len, ret, total_mem);
+  DEBUGF("realloc(%p, %zu) = %p [%zu total]", ptr, len, ret, total_mem);
 
   return ret;
 
