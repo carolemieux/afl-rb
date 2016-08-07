@@ -15,7 +15,7 @@
 
    This Linux-only companion library allows you to instrument strcmp(),
    memcmp(), and related functions to automatically extract tokens.
-   See README.tokens for more info.
+   See README.tokencap for more info.
 
  */
 

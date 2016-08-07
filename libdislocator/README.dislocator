@@ -54,5 +54,7 @@ Similarly to afl-tmin, the library is not "proprietary" and can be used with
 other fuzzers or testing tools without the need for any code tweaks. It does not
 require AFL-instrumented binaries to work.
 
-Note that the LD_PRELOAD approach will work only if the target binary is
-dynamically linked.
+Note that the AFL_PRELOAD approach (which AFL internally maps to LD_PRELOAD or
+DYLD_INSERT_LIBRARIES, depending on the OS) works only if the target binary is
+dynamically linked. Otherwise, attempting to use the library will have no
+effect.
