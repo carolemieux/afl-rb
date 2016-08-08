@@ -33,7 +33,7 @@ Run the bundled afl-plot utility to generate browser-friendly graphs.
 
 %
 
-Need to monitor AFL jobs programatically? Check out the fuzzer_stats file
+Need to monitor AFL jobs programmatically? Check out the fuzzer_stats file
 in the AFL output dir or try afl-whatsup.
 
 %
