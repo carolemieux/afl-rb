@@ -62,11 +62,6 @@ Try the bundled afl-tmin tool - and get small repro files fast!
 
 %
 
-Need to fix a checksum? It's easy to do with an output postprocessor!
-See experimental/post_library to learn more.
-
-%
-
 Not sure if a crash is exploitable? AFL can help you figure it out. Specify
 -C to enable the peruvian were-rabbit mode. See section #10 in README for more.
 
@@ -122,7 +117,7 @@ You can find a simple solution in experimental/argv_fuzzing.
 
 %
 
-Attacking a format that uses checksums? Remove the checksum code or
+Attacking a format that uses checksums? Remove the checksum-checking code or
 use a postprocessor! See experimental/post_library/ for more.
 
 %
