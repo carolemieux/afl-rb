@@ -189,8 +189,6 @@ static u32 write_results(void) {
 
   if (binary_mode) {
 
-    u8 shifted_map[MAP_SIZE];
-
     for (i = 0; i < MAP_SIZE; i++)
       if (trace_bits[i]) ret++;
     
