@@ -21,7 +21,7 @@
 
 /* Version string: */
 
-#define VERSION             "2.39b"
+#define VERSION             "2.40b"
 
 /******************************************************
  *                                                    *
@@ -105,6 +105,10 @@
 #define HAVOC_BLK_SMALL     32
 #define HAVOC_BLK_MEDIUM    128
 #define HAVOC_BLK_LARGE     1500
+
+/* Extra-large blocks, selected very rarely (<2% of the time): */
+
+#define HAVOC_BLK_XL        16384
 
 /* Probabilities of skipping non-favored entries in the queue, expressed as
    percentages: */
