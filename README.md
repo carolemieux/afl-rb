@@ -1,7 +1,9 @@
 # AFL -- Rare Branches (FairFuzz)
-AFL extension to target rare branches
 
----
+An AFL extension to target rare branches. AFL is written and maintained by Michal Zalewski <lcamtuf@google.com>; rare branches extension by Caroline Lemieux <clemieux@cs.berkeley.edu>.
+
+
+## Summary
 
 This is a modified version of [AFL](http://lcamtuf.coredump.cx/afl/) which changes (1) the way in which AFL selects input for mutation and (2) the way in which AFL mutates inputs to target rare "branches" in the program under test. AFL keeps track of program coverage an input achieves by counting the number of times the input hits a _Basic Block Transition_ (see [AFL technical details](http://lcamtuf.coredump.cx/afl/technical_details.txt) for more detail). This basic block transition can be loosely associated with a branch in the control flow graph, thus we call refer to these transitions as _branches_.
 
@@ -19,8 +21,6 @@ Evaluation was conduction on AFL 2.40b. All runs were done with no AFL dictionar
 | `<!ATT` |  1 | 0 | 0| 1|
 
 More details in [article preprint](TODO).
-
----
 
 
 ## Technical Summary
@@ -50,8 +50,6 @@ The branch mask is then used to influence mutations as follows:
 
 <a name="footnote1">1</a>: The mask is not used in the bitflipping stage since this would interfere with AFL's automatic detection of dictionary elements. 
 
----
-
 
 ## Usage summary
 
@@ -69,9 +67,7 @@ For basic AFL usage, see the (README)[README] in this directory (the one with no
 *`-s` runs a "shadow" mutation run before the branch-mask enabled run. Side effects are disabled in this run. This allows for direct comparison of the effect of the branch mask on new coverage discovered/number of inputs hitting the target branch. See minbranchfuzzing.log in the output directory for details.
 
 
----
 
-AFL is written and maintained by Michal Zalewski <lcamtuf@google.com>; rare branches extension by Caroline Lemieux <clemieux@cs.berkeley.edu>.
 
 
 
