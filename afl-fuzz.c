@@ -8044,10 +8044,10 @@ static void usage(u8* argv0) {
 
        "  -d            - quick & dirty mode (skips deterministic steps)\n"
        "  -n            - fuzz without instrumentation (dumb mode)\n"
-       "  -a            - (RB) add an additional trimming stage for rare branches\n"
-       "  -p            - (RB) disable the use of branch mask to guide execution\n"
+       "  -r            - (RB) add an additional trimming stage for rare branches\n"
+       "  -b            - (RB) disable the use of branch mask to guide execution\n"
        "  -x dir        - optional fuzzer dictionary (see README)\n"
-       "  -b num        - (RB) bootstrap rare branches with:\n"
+       "  -q num        - (RB) bootstrap rare branches with:\n"
        "                  num=1: regular AFL queueing until a new branch is discovered\n"
        "                  num=2: regular AFL queueing, no determistic fuzzing,\n"
        "                         until a new branch is discovered\n"
@@ -8060,7 +8060,8 @@ static void usage(u8* argv0) {
        "  -C            - crash exploration mode (the peruvian rabbit thing)\n\n"
        "  -s            - (RB) run in shadow mode (compare with and without branch mask)\n"
 
-       "For additional tips, please consult %s/README.\n\n",
+       "For additional tips, please consult %s/README.\n"
+       "See %s/README.md for options marked (RB).\n\n",
 
        argv0, EXEC_TIMEOUT, MEM_LIMIT, doc_path);
 
@@ -8716,19 +8717,19 @@ int main(int argc, char** argv) {
   gettimeofday(&tv, &tz);
   srandom(tv.tv_sec ^ tv.tv_usec ^ getpid());
 
-  while ((opt = getopt(argc, argv, "+i:b:r:p:o:f:m:t:T:dasnCB:S:M:x:Q")) > 0)
+  while ((opt = getopt(argc, argv, "+bq:rsi:o:f:m:t:T:dnCB:S:M:x:Q")) > 0)
 
     switch (opt) {
 
-      case 'p': /* disable use of branch mask */
+      case 'b': /* disable use of branch mask */
         use_branch_mask = 0;
         break;
 
-      case 'b': /* bootstrap after being stuck */
+      case 'q': /* bootstrap queueing after being stuck */
         bootstrap = strtol(optarg, 0, 10);
         break;
 
-      case 'a': /* trim for branch */
+      case 'r': /* trim for branch */
         trim_for_branch = 1;
         break;
 
