@@ -9,8 +9,7 @@ This is a modified version of [AFL](http://lcamtuf.coredump.cx/afl/) which chang
 
 On many benchmarks, this modification achieves faster branch coverage than AFL or AFLFast. The advantage seems particularly strong on programs structured with many nested conditional statements. The graphs below show the number of basic block transitions covered over 24 hours on 9 different benchmarks. Each run was repeated 20 times (one fuzzer only): the dark middle line is the average coverage achieved, and the bands represent 95% confidence intervals.
 
-![24 hour runs on benchmarks]
-(https://github.com/carolemieux/afl-rb/24-hour-runs-2.40b.png)
+![24 hour runs on benchmarks](https://github.com/carolemieux/afl-rb/raw/master/24-hour-runs-2.40b.png)
 
 Evaluation was conduction on AFL 2.40b. All runs were done with no AFL dictionary: the emphasis on rare branches appears to yield better automated discovery of special sequences. On the `tcpdump` and `xmllint` benchmarks, FairFuzz was able to discover rare sequences over the 20 runs, which the other techniques did not discover. Over these 20 techniques each different technique, the number of runs finding portions of the sequence `<!ATTLIST` after 24 hours was:
 
@@ -21,7 +20,6 @@ Evaluation was conduction on AFL 2.40b. All runs were done with no AFL dictionar
 | `<!ATT` |  1 | 0 | 0| 1|
 
 More details in [article preprint](TODO).
-
 
 ## Technical Summary
 
@@ -48,7 +46,7 @@ The branch mask is then used to influence mutations as follows:
 2. In the havoc stage, positions for mutations are randomly selected _within the modifiable positions of the branch mask_. For example, if bytes 5-10 and 13-20 in a 20-byte input can be overwritten without failing to hit the target branch, when randomly selecting a byte to randomly mutate, FairFuzz will randomly select a position in [5,6,7,8,9,10,13,...,20] to mutate. After a havoc mutation that deletes (resp. adds) a sequence of bytes in the input, FairFuzz deletes the sequence(resp. adds an "all modifiable" sequence) at the corresponding location in the branch mask. The branch mask becomes approximate after this point.
 
 
-<a name="footnote1">1</a>: The mask is not used in the bitflipping stage since this would interfere with AFL's automatic detection of dictionary elements. 
+<a name="footnote1"><sup>1</sup></a> The mask is not used in the bitflipping stage since this would interfere with AFL's automatic detection of dictionary elements. 
 
 
 ## Usage summary
@@ -56,15 +54,15 @@ The branch mask is then used to influence mutations as follows:
 For basic AFL usage, see the (README)[README] in this directory (the one with no .md extension). There are four FairFuzz Rare Branches-specific options.
 
 *Running options* (may be useful for functionality):
-*`-r` adds an additional trimming stage before mutating inputs. This trimming is more aggressive than AFL's, trimming the input down only according to the target branch -- the resulting trimmed input may have a different path than the original input, but will still hit the target branch. Recommended for use if there are very large seed files and deterministic mutations are being run.
-*`-q num` bootstraps the rare branch queueing mechanism. If after an entire cycle through the queue, no new branches are discovered, bootstrap according to `num`:
-* `num=1` go back to regular AFL queueing + no branch mask on mutations until a new branch is found
-* `num=2` go back to regular AFL queueing + no branch mask on mutations + no deterministic mutations until a new branch is found
-* `num=3` go back to regular AFL queueing + no branch mask on mutations for a single queueing cycle
+- `-r` adds an additional trimming stage before mutating inputs. This trimming is more aggressive than AFL's, trimming the input down only according to the target branch -- the resulting trimmed input may have a different path than the original input, but will still hit the target branch. Recommended for use if there are very large seed files and deterministic mutations are being run.
+- `-q num` bootstraps the rare branch queueing mechanism. If after an entire cycle through the queue, no new branches are discovered, bootstrap according to `num`:
+  - `num=1` go back to regular AFL queueing + no branch mask on mutations until a new branch is found
+  - `num=2` go back to regular AFL queueing + no branch mask on mutations + no deterministic mutations until a new branch is found
+  - `num=3` go back to regular AFL queueing + no branch mask on mutations for a single queueing cycle
 
 *Evaluation options* (less useful for functionality, more for comparing AFL versions):
-*`-b` disables the branch mask. Mostly for evaluation of the impact of the input selection without the branch mask. 
-*`-s` runs a "shadow" mutation run before the branch-mask enabled run. Side effects are disabled in this run. This allows for direct comparison of the effect of the branch mask on new coverage discovered/number of inputs hitting the target branch. See minbranchfuzzing.log in the output directory for details.
+- `-b` disables the branch mask. Mostly for evaluation of the impact of the input selection without the branch mask. 
+- `-s` runs a "shadow" mutation run before the branch-mask enabled run. Side effects are disabled in this run. This allows for direct comparison of the effect of the branch mask on new coverage discovered/number of inputs hitting the target branch. See minbranchfuzzing.log in the output directory for details.
 
 
 
