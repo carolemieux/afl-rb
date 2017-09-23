@@ -53,7 +53,7 @@ The branch mask is then used to influence mutations as follows:
 
 ## Usage summary
 
-For basic AFL usage, see the (README)[https://github.com/carolemieux/afl-rb/blob/master/docs/README] in `docs/` (the one with no .md extension). There are four FairFuzz Rare Branches-specific options:
+For basic AFL usage, see the [README](https://github.com/carolemieux/afl-rb/blob/master/docs/README) in `docs/` (the one with no .md extension). There are four FairFuzz Rare Branches-specific options:
 
 *Running options* (may be useful for functionality):
 - `-r` adds an additional trimming stage before mutating inputs. This trimming is more aggressive than AFL's, trimming the input down only according to the target branch -- the resulting trimmed input may have a different path than the original input, but will still hit the target branch. Recommended for use if there are very large seed files and deterministic mutations are being run.
@@ -65,9 +65,3 @@ For basic AFL usage, see the (README)[https://github.com/carolemieux/afl-rb/blob
 *Evaluation options* (mostly useful for comparing AFL versions):
 - `-b` disables the branch mask. (sets every position in the mask as modifiable -- will incur unnecessary slowdown compared to AFL) 
 - `-s` runs a "shadow" mutation run before the branch-mask enabled run. Side effects are disabled in this run. This allows for direct comparison of the effect of the branch mask on new coverage discovered/number of inputs hitting the target branch. See `minbranchfuzzing.log` produced in the AFL output directory for details.
-
-
-
-
-
-
