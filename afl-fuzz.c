@@ -8063,7 +8063,7 @@ static void usage(u8* argv0) {
        "For additional tips, please consult %s/README.\n"
        "See %s/README.md for options marked (RB).\n\n",
 
-       argv0, EXEC_TIMEOUT, MEM_LIMIT, doc_path);
+       argv0, EXEC_TIMEOUT, MEM_LIMIT, doc_path, doc_path);
 
   exit(1);
 
