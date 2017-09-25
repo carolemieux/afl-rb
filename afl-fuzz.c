@@ -5424,7 +5424,7 @@ static u8 fuzz_one(char** argv) {
   u8 skip_simple_bitflip = 0;
   u8 * virgin_virgin_bits = 0;
   char * shadow_prefix = "";
-  u32 * position_map;
+  u32 * position_map = NULL;
   u32 orig_queued_with_cov = queued_with_cov;
   u32 orig_queued_discovered = queued_discovered;
   u32 orig_total_execs = total_execs;
