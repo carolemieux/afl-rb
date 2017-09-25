@@ -302,6 +302,7 @@ static u32 MAX_RARE_BRANCHES = 256;
 static int rare_branch_exp = 4;        /* @RB@ less than 2^rare_branch_exp is rare*/
 
 static int * blacklist; 
+static int blacklist_size = 1024;
 static int blacklist_pos;
 
 static u32 rb_fuzzing = 0;           /* @RB@ non-zero branch index + 1 if fuzzing is being done with that branch constant*/
@@ -6009,12 +6010,19 @@ skip_simple_bitflip:
   }
 
   if (rb_fuzzing && (successful_branch_tries == 0)){
-    if (blacklist_pos >= 1023){
-      // @RB@ todo: make this fail more sensibly, or increase list size. 
-      PFATAL("Too many things on the blacklist\n");
+    if (blacklist_pos >= blacklist_size -1){
+      DEBUG1("Increasing size of blacklist from %d to %d\n", blacklist_size, blacklist_size*2);
+      blacklist_size = 2 * blacklist_size; 
+      int * new_list = malloc(sizeof(int)* blacklist_size);
+      for (int k = 0; k <= blacklist_pos; k++){
+        new_list[k] =blacklist[k];
+      }
+      free(blacklist);
+      blacklist = new_list;
     }
     blacklist[blacklist_pos++] = rb_fuzzing -1;
     blacklist[blacklist_pos] = -1;
+    DEBUG1("adding branch %i to blacklist\n", rb_fuzzing-1);
   }
   /* @RB@ reset stats for debugging*/
   DEBUG1("%swhile calibrating, %i of %i tries hit branch %i\n", shadow_prefix, successful_branch_tries, total_branch_tries, rb_fuzzing - 1);
@@ -8702,9 +8710,7 @@ int main(int argc, char** argv) {
   u8  exit_1 = !!getenv("AFL_BENCH_JUST_ONE");
   char** use_argv;
 
-
-  // RB TODO: possibly increase the size of this. 
-  blacklist = malloc(sizeof(int)* 1024);
+  blacklist = malloc(sizeof(int)* blacklist_size);
   blacklist[0] = -1;
 
   struct timeval tv;
