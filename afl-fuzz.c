@@ -5429,6 +5429,7 @@ static u8 fuzz_one(char** argv) {
   u32 orig_queued_with_cov = queued_with_cov;
   u32 orig_queued_discovered = queued_discovered;
   u32 orig_total_execs = total_execs;
+  u32 total_successful_branch_tries = 0;
   
 
   if (!vanilla_afl){
@@ -5854,7 +5855,7 @@ re_run: // re-run when running in shadow mode
 
   /* @RB@ */
   DEBUG1("%swhile bitflipping, %i of %i tries hit branch %i\n", shadow_prefix, successful_branch_tries, total_branch_tries, rb_fuzzing - 1);
-
+  if (!shadow_mode) total_successful_branch_tries += successful_branch_tries;
 
 skip_simple_bitflip:
 
@@ -6009,25 +6010,12 @@ skip_simple_bitflip:
     memcpy (orig_branch_mask, branch_mask, len + 1);
   }
 
-  if (rb_fuzzing && (successful_branch_tries == 0)){
-    if (blacklist_pos >= blacklist_size -1){
-      DEBUG1("Increasing size of blacklist from %d to %d\n", blacklist_size, blacklist_size*2);
-      blacklist_size = 2 * blacklist_size; 
-      int * new_list = malloc(sizeof(int)* blacklist_size);
-      for (int k = 0; k <= blacklist_pos; k++){
-        new_list[k] =blacklist[k];
-      }
-      free(blacklist);
-      blacklist = new_list;
-    }
-    blacklist[blacklist_pos++] = rb_fuzzing -1;
-    blacklist[blacklist_pos] = -1;
-    DEBUG1("adding branch %i to blacklist\n", rb_fuzzing-1);
-  }
   /* @RB@ reset stats for debugging*/
   DEBUG1("%swhile calibrating, %i of %i tries hit branch %i\n", shadow_prefix, successful_branch_tries, total_branch_tries, rb_fuzzing - 1);
   DEBUG1("%scalib stage: %i new coverage in %i total execs\n", shadow_prefix, queued_discovered-orig_queued_discovered, total_execs-orig_total_execs);
   DEBUG1("%scalib stage: %i new branches in %i total execs\n", shadow_prefix, queued_with_cov-orig_queued_with_cov, total_execs-orig_total_execs);
+ 
+  if (!shadow_mode) total_successful_branch_tries += successful_branch_tries;
   successful_branch_tries = 0;
   total_branch_tries = 0;
 
@@ -6935,6 +6923,7 @@ skip_extras:
   DEBUG1("%sdet stage: %i new coverage in %i total execs\n", shadow_prefix, queued_discovered-orig_queued_discovered, total_execs-orig_total_execs);
   DEBUG1("%sdet stage: %i new branches in %i total execs\n", shadow_prefix, queued_with_cov-orig_queued_with_cov, total_execs-orig_total_execs);
 
+  if (!shadow_mode) total_successful_branch_tries += successful_branch_tries;
   successful_branch_tries = 0;
   total_branch_tries = 0;
 
@@ -7584,11 +7573,31 @@ abandon_entry:
 
   /* @RB@ reset stats for debugging*/
   DEBUG1("%sIn havoc stage, %i of %i tries hit branch %i\n", shadow_prefix, successful_branch_tries, total_branch_tries, rb_fuzzing - 1);
+  if (!shadow_mode) total_successful_branch_tries += successful_branch_tries;
   successful_branch_tries = 0;
   total_branch_tries = 0;
   DEBUG1("%shavoc stage: %i new coverage in %i total execs\n", shadow_prefix, queued_discovered-orig_queued_discovered, total_execs-orig_total_execs);
   DEBUG1("%shavoc stage: %i new branches in %i total execs\n", shadow_prefix, queued_with_cov-orig_queued_with_cov, total_execs-orig_total_execs);
+  
   if (shadow_mode) goto re_run;
+
+  
+  if (rb_fuzzing && (total_successful_branch_tries == 0)){
+    if (blacklist_pos >= blacklist_size -1){
+      DEBUG1("Increasing size of blacklist from %d to %d\n", blacklist_size, blacklist_size*2);
+      blacklist_size = 2 * blacklist_size; 
+      int * new_list = malloc(sizeof(int)* blacklist_size);
+      for (int k = 0; k <= blacklist_pos; k++){
+        new_list[k] =blacklist[k];
+      }
+      free(blacklist);
+      blacklist = new_list;
+    }
+    blacklist[blacklist_pos++] = rb_fuzzing -1;
+    blacklist[blacklist_pos] = -1;
+    DEBUG1("adding branch %i to blacklist\n", rb_fuzzing-1);
+  }
+
 
   if (queued_with_cov-orig_queued_with_cov){
     prev_cycle_wo_new = 0;
