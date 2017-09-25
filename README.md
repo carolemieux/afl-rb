@@ -64,4 +64,4 @@ For basic AFL usage, see the [README](https://github.com/carolemieux/afl-rb/blob
 
 *Evaluation options* (mostly useful for comparing AFL versions):
 - `-b` disables the branch mask. (sets every position in the mask as modifiable -- will incur unnecessary slowdown compared to AFL) 
-- `-s` runs a "shadow" mutation run before the branch-mask enabled run. Side effects are disabled in this run. This allows for direct comparison of the effect of the branch mask on new coverage discovered/number of inputs hitting the target branch. See `minbranchfuzzing.log` produced in the AFL output directory for details.
+- `-s` runs a "shadow" mutation run before the branch-mask enabled run. Side effects are disabled in this run. This allows for direct comparison of the effect of the branch mask on new coverage discovered/number of inputs hitting the target branch. See `min-branch-fuzzing.log` produced in the AFL output directory for details.
