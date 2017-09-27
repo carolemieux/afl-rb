@@ -3055,6 +3055,8 @@ static void perform_dry_run(char** argv) {
 
     res = calibrate_case(argv, q, use_mem, 0, 1);
 
+    ck_free(q->trace_mini);
+    ck_free(q->fuzzed_branches);
     // @RB@ added these for every queue entry
     q->trace_mini = ck_alloc(MAP_SIZE >> 3);
     minimize_bits(q->trace_mini, trace_bits);
@@ -6013,12 +6015,10 @@ skip_simple_bitflip:
     if (blacklist_pos >= blacklist_size -1){
       DEBUG1("Increasing size of blacklist from %d to %d\n", blacklist_size, blacklist_size*2);
       blacklist_size = 2 * blacklist_size; 
-      int * new_list = malloc(sizeof(int)* blacklist_size);
-      for (int k = 0; k <= blacklist_pos; k++){
-        new_list[k] =blacklist[k];
+      blacklist = realloc(blacklist, sizeof(int)* blacklist_size);
+      if (!blacklist){
+        PFATAL("Failed to realloc blacklist");
       }
-      free(blacklist);
-      blacklist = new_list;
     }
     blacklist[blacklist_pos++] = rb_fuzzing -1;
     blacklist[blacklist_pos] = -1;
