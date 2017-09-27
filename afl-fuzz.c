@@ -3053,8 +3053,6 @@ static void perform_dry_run(char** argv) {
 
     res = calibrate_case(argv, q, use_mem, 0, 1);
 
-    ck_free(q->trace_mini);
-    ck_free(q->fuzzed_branches);
     // @RB@ added these for every queue entry
     // free what was added in add_to_queue
     ck_free(q->trace_mini);
