@@ -7262,9 +7262,9 @@ havoc_stage:
 
             temp_len += clone_len;
 
-            free(position_map);
-            position_map =malloc(sizeof(u32)*(temp_len+1));
-
+            position_map = realloc(position_map, sizeof (u32) * (temp_len + 1));
+            if (!position_map)
+              PFATAL("Failure resizing position_map.\n");
           }
 
           break;
@@ -7406,8 +7406,9 @@ havoc_stage:
             out_buf   = new_buf;
             temp_len += extra_len;
 
-            free(position_map);
-            position_map = malloc(sizeof(u32)*(temp_len + 1));
+            position_map = realloc(position_map, sizeof (u32) * (temp_len + 1));
+            if (!position_map)
+              PFATAL("Failure resizing position_map.\n");
 
             break;
 
@@ -7425,8 +7426,9 @@ havoc_stage:
     if (temp_len < len) {
       out_buf = ck_realloc(out_buf, len);
       branch_mask = ck_realloc(branch_mask, len + 1);
-      free(position_map);
-      position_map = malloc(sizeof(u32)*(len+1));
+      position_map = realloc(position_map, sizeof (u32) * (len + 1));
+      if (!position_map)
+        PFATAL("Failure resizing position_map.\n");
     }
     temp_len = len;
     memcpy(out_buf, in_buf, len);
@@ -7559,8 +7561,9 @@ retry_splicing:
     orig_branch_mask = ck_alloc(len +1);
     //ck_realloc(orig_branch_mask, len + 1);
     memcpy (orig_branch_mask, branch_mask, len + 1);
-    free(position_map);
-    position_map = malloc(sizeof(u32)*(len+1));
+    position_map = realloc(position_map, sizeof (u32) * (len + 1));
+    if (!position_map)
+      PFATAL("Failure resizing position_map.\n");
 
     goto havoc_stage;
 
