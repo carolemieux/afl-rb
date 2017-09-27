@@ -422,17 +422,15 @@ void fileonly (char const *fmt, ...) {
 
 /* at the end of execution, dump the number of inputs hitting
    each branch to log */
-static void dump_to_logs(){
-
-  FILE * branch_hits;
-  u8* fn = alloc_printf("%s/branch-hits.bin", out_dir );
+static void dump_to_logs() {
+  s32 branch_hit_fd = -1;
+  u8* fn = alloc_printf("%s/branch-hits.bin", out_dir);
   unlink(fn); /* Ignore errors */
-  branch_hits = fopen(fn,"w");
-  if (branch_hits == NULL) PFATAL("Unable to create '%s'", fn);
+  branch_hit_fd = open(fn, O_CREAT | O_WRONLY | O_TRUNC, 0600);
+  if (branch_hit_fd < 0) PFATAL("Unable to create '%s'", fn);
+  ck_write(branch_hit_fd, hit_bits, sizeof(u64) * MAP_SIZE, fn);
   ck_free(fn);
-  fwrite(hit_bits, sizeof(u64), MAP_SIZE, branch_hits);
-  fclose(branch_hits);
-
+  close(branch_hit_fd);
 }
 
 /* Get unix time in milliseconds */
@@ -1079,16 +1077,18 @@ static u32 get_random_insert_posn(u32 map_len, u8* branch_mask, u32 * position_m
 
 
 // when resuming re-increment hit bits
-static void init_hit_bits (){
+static void init_hit_bits() {
+  s32 branch_hit_fd = -1;
+
   ACTF("Attempting to init hit bits...");
-  FILE * branch_hit_file;
-  u8* fn = alloc_printf("%s/branch-hits.bin", out_dir );
-  branch_hit_file = fopen(fn,"r");
-  if (branch_hit_file == NULL) PFATAL("Unable to open '%s'", fn);
+  u8* fn = alloc_printf("%s/branch-hits.bin", out_dir);
 
-  fread(hit_bits, sizeof(u64), MAP_SIZE, branch_hit_file);
+  branch_hit_fd = open(fn, O_RDONLY);
+  if (branch_hit_fd < 0) PFATAL("Unable to open '%s'", fn);
 
-  fclose(branch_hit_file);
+  ck_read(branch_hit_fd, hit_bits, sizeof(u64) * MAP_SIZE, fn);
+
+  close(branch_hit_fd);
   OKF("Init'ed hit_bits.");
 }
 
