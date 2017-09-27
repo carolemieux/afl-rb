@@ -48,6 +48,7 @@ The branch mask is then used to influence mutations as follows:
 
 
 <a name="footnote1"><sup>1</sup></a> <small>The mask is not used in the bitflipping stage since this would interfere with AFL's automatic detection of dictionary elements. </small>
+
 <a name="footnote2"><sup>2</sup></a> <small>The mask is not used to determine where to splice inputs in the splicing stage: during splicing, the first part of the branch mask is kept, but the spliced half of the input is marked as all modifiable.</small>
 
 
