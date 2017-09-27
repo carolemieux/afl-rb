@@ -1135,7 +1135,6 @@ static void add_to_queue(u8* fname, u32 len, u8 passed_det) {
     queue_top = q;
 
   } else q_prev100 = queue = queue_top = q;
-
   queued_paths++;
   pending_not_fuzzed++;
 
@@ -1160,7 +1159,6 @@ EXP_ST void destroy_queue(void) {
   struct queue_entry *q = queue, *n;
 
   while (q) {
-
     n = q->next;
     ck_free(q->fname);
     ck_free(q->trace_mini);
@@ -3058,6 +3056,9 @@ static void perform_dry_run(char** argv) {
     ck_free(q->trace_mini);
     ck_free(q->fuzzed_branches);
     // @RB@ added these for every queue entry
+    // free what was added in add_to_queue
+    ck_free(q->trace_mini);
+    ck_free(q->fuzzed_branches);
     q->trace_mini = ck_alloc(MAP_SIZE >> 3);
     minimize_bits(q->trace_mini, trace_bits);
     q->fuzzed_branches = ck_alloc(MAP_SIZE >>3);
