@@ -422,17 +422,15 @@ void fileonly (char const *fmt, ...) {
 
 /* at the end of execution, dump the number of inputs hitting
    each branch to log */
-static void dump_to_logs(){
-
-  FILE * branch_hits;
-  u8* fn = alloc_printf("%s/branch-hits.bin", out_dir );
+static void dump_to_logs() {
+  s32 branch_hit_fd = -1;
+  u8* fn = alloc_printf("%s/branch-hits.bin", out_dir);
   unlink(fn); /* Ignore errors */
-  branch_hits = fopen(fn,"w");
-  if (branch_hits == NULL) PFATAL("Unable to create '%s'", fn);
+  branch_hit_fd = open(fn, O_CREAT | O_WRONLY | O_TRUNC, 0600);
+  if (branch_hit_fd < 0) PFATAL("Unable to create '%s'", fn);
+  ck_write(branch_hit_fd, hit_bits, sizeof(u64) * MAP_SIZE, fn);
   ck_free(fn);
-  fwrite(hit_bits, sizeof(u64), MAP_SIZE, branch_hits);
-  fclose(branch_hits);
-
+  close(branch_hit_fd);
 }
 
 /* Get unix time in milliseconds */
@@ -893,7 +891,7 @@ static int contains_id(int branch_id, int* branch_ids){
 
 /* you'll have to free the return pointer. */
 static int* get_lowest_hit_branch_ids(){
-  int * rare_branch_ids = malloc(sizeof(int)*MAX_RARE_BRANCHES);
+  int * rare_branch_ids = ck_alloc(sizeof(int) * MAX_RARE_BRANCHES);
   int lowest_hob = INT_MAX;
   int ret_list_size = 0;
 
@@ -927,7 +925,7 @@ static int* get_lowest_hit_branch_ids(){
     if (lowest_hob != INT_MAX) {
       rare_branch_exp = lowest_hob + 1;
       DEBUG1("Upped max exp to %i\n", rare_branch_exp);
-      free(rare_branch_ids);
+      ck_free(rare_branch_ids);
       return get_lowest_hit_branch_ids();
     }
   }
@@ -992,7 +990,7 @@ static u32 * is_rb_hit_mini(u8* trace_bits_mini){
 
   }
   ck_free(branch_cts);
-  free(rarest_branches);
+  ck_free(rarest_branches);
   if (min_hit_index == 0){
       ck_free(branch_ids);
       branch_ids = NULL;
@@ -1079,16 +1077,18 @@ static u32 get_random_insert_posn(u32 map_len, u8* branch_mask, u32 * position_m
 
 
 // when resuming re-increment hit bits
-static void init_hit_bits (){
+static void init_hit_bits() {
+  s32 branch_hit_fd = -1;
+
   ACTF("Attempting to init hit bits...");
-  FILE * branch_hit_file;
-  u8* fn = alloc_printf("%s/branch-hits.bin", out_dir );
-  branch_hit_file = fopen(fn,"r");
-  if (branch_hit_file == NULL) PFATAL("Unable to open '%s'", fn);
+  u8* fn = alloc_printf("%s/branch-hits.bin", out_dir);
 
-  fread(hit_bits, sizeof(u64), MAP_SIZE, branch_hit_file);
+  branch_hit_fd = open(fn, O_RDONLY);
+  if (branch_hit_fd < 0) PFATAL("Unable to open '%s'", fn);
 
-  fclose(branch_hit_file);
+  ck_read(branch_hit_fd, hit_bits, sizeof(u64) * MAP_SIZE, fn);
+
+  close(branch_hit_fd);
   OKF("Init'ed hit_bits.");
 }
 
@@ -3053,8 +3053,6 @@ static void perform_dry_run(char** argv) {
 
     res = calibrate_case(argv, q, use_mem, 0, 1);
 
-    ck_free(q->trace_mini);
-    ck_free(q->fuzzed_branches);
     // @RB@ added these for every queue entry
     // free what was added in add_to_queue
     ck_free(q->trace_mini);
@@ -5560,7 +5558,7 @@ static u8 fuzz_one(char** argv) {
 
 
     DEBUG1("which hit branch %i (hit by %u inputs) \n", rb_fuzzing -1, hit_bits[rb_fuzzing -1]);
-    //free(rarest_branches);
+    //ck_free(rarest_branches);
    
     }
   }
@@ -5719,7 +5717,7 @@ re_run: // re-run when running in shadow mode
   }
   // this will be used to store the valid modifiable positions
   // in the havoc stage. malloc'ing once to reduce overhead. 
-  position_map = malloc(sizeof(u32)*(len+1));
+  position_map = ck_alloc(sizeof(u32) * (len+1));
 
   /* Skip right away if -d is given, if we have done deterministic fuzzing on
      this entry ourselves (was_fuzzed), or if it has gone through deterministic
@@ -6016,7 +6014,7 @@ skip_simple_bitflip:
     if (blacklist_pos >= blacklist_size -1){
       DEBUG1("Increasing size of blacklist from %d to %d\n", blacklist_size, blacklist_size*2);
       blacklist_size = 2 * blacklist_size; 
-      blacklist = realloc(blacklist, sizeof(int)* blacklist_size);
+      blacklist = ck_realloc(blacklist, sizeof(int) * blacklist_size);
       if (!blacklist){
         PFATAL("Failed to realloc blacklist");
       }
@@ -7262,9 +7260,9 @@ havoc_stage:
 
             temp_len += clone_len;
 
-            free(position_map);
-            position_map =malloc(sizeof(u32)*(temp_len+1));
-
+            position_map = ck_realloc(position_map, sizeof (u32) * (temp_len + 1));
+            if (!position_map)
+              PFATAL("Failure resizing position_map.\n");
           }
 
           break;
@@ -7406,8 +7404,9 @@ havoc_stage:
             out_buf   = new_buf;
             temp_len += extra_len;
 
-            free(position_map);
-            position_map = malloc(sizeof(u32)*(temp_len + 1));
+            position_map = ck_realloc(position_map, sizeof (u32) * (temp_len + 1));
+            if (!position_map)
+              PFATAL("Failure resizing position_map.\n");
 
             break;
 
@@ -7425,8 +7424,9 @@ havoc_stage:
     if (temp_len < len) {
       out_buf = ck_realloc(out_buf, len);
       branch_mask = ck_realloc(branch_mask, len + 1);
-      free(position_map);
-      position_map = malloc(sizeof(u32)*(len+1));
+      position_map = ck_realloc(position_map, sizeof (u32) * (len + 1));
+      if (!position_map)
+        PFATAL("Failure resizing position_map.\n");
     }
     temp_len = len;
     memcpy(out_buf, in_buf, len);
@@ -7559,8 +7559,9 @@ retry_splicing:
     orig_branch_mask = ck_alloc(len +1);
     //ck_realloc(orig_branch_mask, len + 1);
     memcpy (orig_branch_mask, branch_mask, len + 1);
-    free(position_map);
-    position_map = malloc(sizeof(u32)*(len+1));
+    position_map = ck_realloc(position_map, sizeof (u32) * (len + 1));
+    if (!position_map)
+      PFATAL("Failure resizing position_map.\n");
 
     goto havoc_stage;
 
@@ -7601,7 +7602,7 @@ abandon_entry:
 
   if (in_buf != orig_in) ck_free(in_buf);
 
-  free(position_map);
+  ck_free(position_map);
   ck_free(out_buf);
   ck_free(eff_map);
   ck_free(branch_mask);
@@ -8711,7 +8712,7 @@ int main(int argc, char** argv) {
   u8  exit_1 = !!getenv("AFL_BENCH_JUST_ONE");
   char** use_argv;
 
-  blacklist = malloc(sizeof(int)* blacklist_size);
+  blacklist = ck_alloc(sizeof(int) * blacklist_size);
   blacklist[0] = -1;
 
   struct timeval tv;
@@ -9113,7 +9114,7 @@ stop_fuzzing:
 
   dump_to_logs();
   fclose(plot_file);
-  free(blacklist);
+  ck_free(blacklist);
   destroy_queue();
   destroy_extras();
   ck_free(target_path);
