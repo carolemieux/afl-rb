@@ -5985,7 +5985,7 @@ skip_simple_bitflip:
       }
     }
 
-    // check if we can add at this branch
+    // check if we can add at this byte
     stage_short = "rbadd8";
     for (stage_cur = 0; stage_cur <= len; stage_cur++) {
       /* add random byte */
@@ -5996,7 +5996,7 @@ skip_simple_bitflip:
       /* tail */
       memcpy(tmp_buf + stage_cur + 1, out_buf + stage_cur, len - stage_cur);
 
-      if (common_fuzz_stuff(argv, tmp_buf, len - 1)) goto abandon_entry;
+      if (common_fuzz_stuff(argv, tmp_buf, len + 1)) goto abandon_entry;
 
       /* if adding before still hit branch, can add */
       if (hits_branch(rb_fuzzing - 1)){
