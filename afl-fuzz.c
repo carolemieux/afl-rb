@@ -8,7 +8,7 @@
 
    Rare branches extension by Caroline Lemieux <clemieux@cs.berkeley.edu>
 
-   Copyright 2013, 2014, 2015, 2016 Google Inc. All rights reserved.
+   Copyright 2013, 2014, 2015, 2016, 2017 Google Inc. All rights reserved.
 
    Licensed under the Apache License, Version 2.0 (the "License");
    you may not use this file except in compliance with the License.
@@ -35,7 +35,6 @@
 #include "debug.h"
 #include "alloc-inl.h"
 #include "hash.h"
-
 
 #include <stdio.h>
 #include <unistd.h>
@@ -101,11 +100,9 @@ EXP_ST u8 *in_dir,                    /* Input directory with test cases  */
           *orig_cmdline;              /* Original command line            */
 
 EXP_ST u32 exec_tmout = EXEC_TIMEOUT; /* Configurable exec timeout (ms)   */
-
 static u32 hang_tmout = EXEC_TIMEOUT; /* Timeout used for hang det (ms)   */
 
 EXP_ST u64 mem_limit  = MEM_LIMIT;    /* Memory cap for child (MB)        */
-
 
 static u32 stats_update_freq = 1;     /* Stats update frequency (execs)   */
 
@@ -126,15 +123,14 @@ EXP_ST u8  skip_deterministic,        /* Skip deterministic stages?       */
            auto_changed,              /* Auto-generated tokens changed?   */
            no_cpu_meter_red,          /* Feng shui on the status screen   */
            no_arith,                  /* Skip most arithmetic ops         */
-
            shuffle_queue,             /* Shuffle input queue?             */
            bitmap_changed = 1,        /* Time to update bitmap?           */
            qemu_mode,                 /* Running in QEMU mode?            */
            skip_requested,            /* Skip request, via SIGUSR1        */
            run_over10m,               /* Run time over 10 minutes?        */
            persistent_mode,           /* Running in persistent mode?      */
+           deferred_mode,             /* Deferred forkserver mode?        */
            fast_cal;                  /* Try to calibrate faster?         */
-
 
 static s32 out_fd,                    /* Persistent fd for out_file       */
            dev_urandom_fd = -1,       /* Persistent fd for /dev/urandom   */
@@ -147,7 +143,6 @@ static s32 forksrv_pid,               /* PID of the fork server           */
            out_dir_fd = -1;           /* FD of the lock file              */
 
 EXP_ST u8* trace_bits;                /* SHM with instrumentation bitmap  */
-
 
 static u64 hit_bits[MAP_SIZE];        /* @RB@ Hits to every basic block transition */
 
@@ -199,9 +194,7 @@ EXP_ST u64 total_crashes,             /* Total number of crashes          */
            blocks_eff_total,          /* Blocks subject to effector maps  */
            blocks_eff_select;         /* Blocks selected as fuzzable      */
 
-
 static u32 subseq_tmouts;             /* Number of timeouts in a row      */
-
 
 static u8 *stage_name = "init",       /* Name of the current fuzz stage   */
           *stage_short,               /* Short stage name                 */
@@ -1135,6 +1128,7 @@ static void add_to_queue(u8* fname, u32 len, u8 passed_det) {
     queue_top = q;
 
   } else q_prev100 = queue = queue_top = q;
+
   queued_paths++;
   pending_not_fuzzed++;
 
@@ -1470,7 +1464,6 @@ static const u8 count_class_lookup8[256] = {
 };
 
 static u16 count_class_lookup16[65536];
-
 
 
 EXP_ST void init_count_class16(void) {
@@ -2880,7 +2873,6 @@ static u8 calibrate_case(char** argv, struct queue_entry* q, u8* use_mem,
     use_tmout = MAX(exec_tmout + CAL_TMOUT_ADD,
                     exec_tmout * CAL_TMOUT_PERC / 100);
 
-
   q->cal_failed++;
 
   stage_name = "calibration";
@@ -3483,7 +3475,6 @@ static u8 save_if_interesting(char** argv, void* mem, u32 len, u8 fault) {
        future fuzzing, etc. */
 
     if (!(hnb = has_new_bits(virgin_bits))) {
-
       if (crash_mode) total_crashes++;
       return 0;
     }   
@@ -3525,7 +3516,6 @@ static u8 save_if_interesting(char** argv, void* mem, u32 len, u8 fault) {
       close(fd);
     } 
 
-
     keeping = 1;
 
   }
@@ -3535,7 +3525,6 @@ static u8 save_if_interesting(char** argv, void* mem, u32 len, u8 fault) {
     case FAULT_TMOUT:
 
       /* Timeouts are not very interesting, but we're still obliged to keep
-
          a handful of samples. We use the presence of new bits in the
          hang-specific bitmap as a signal of uniqueness. In "dumb" mode, we
          just keep everything. */
@@ -3792,6 +3781,7 @@ static void write_stats_file(double bitmap_cvg, double stability, double eps) {
              "exec_timeout      : %u\n"
              "afl_banner        : %s\n"
              "afl_version       : " VERSION "\n"
+             "target_mode       : %s%s%s%s%s%s%s\n"
              "command_line      : %s\n",
              start_time / 1000, get_cur_time() / 1000, getpid(),
              queue_cycle ? (queue_cycle - 1) : 0, total_execs, eps,
@@ -3800,7 +3790,13 @@ static void write_stats_file(double bitmap_cvg, double stability, double eps) {
              queued_variable, stability, bitmap_cvg, unique_crashes,
              unique_hangs, last_path_time / 1000, last_crash_time / 1000,
              last_hang_time / 1000, total_execs - last_crash_execs,
-             exec_tmout, use_banner, orig_cmdline);
+             exec_tmout, use_banner,
+             qemu_mode ? "qemu " : "", dumb_mode ? " dumb " : "",
+             no_forkserver ? "no_forksrv " : "", crash_mode ? "crash " : "",
+             persistent_mode ? "persistent " : "", deferred_mode ? "deferred " : "",
+             (qemu_mode || dumb_mode || no_forkserver || crash_mode ||
+              persistent_mode || deferred_mode) ? "" : "default",
+             orig_cmdline);
              /* ignore errors */
 
   fclose(f);
@@ -4800,7 +4796,6 @@ static void show_init_stats(void) {
 }
 
 
-
 /* Find first power of two greater or equal to val (assuming val under
    2^31). */
 
@@ -4862,7 +4857,6 @@ static u8 trim_case(char** argv, struct queue_entry* q, u8* in_buf) {
       write_with_gap(in_buf, q->len, remove_pos, trim_avail);
 
       fault = run_target(argv, exec_tmout);
-
       trim_execs++;
 
       if (stop_soon || fault == FAULT_ERROR) goto abort_trimming;
@@ -4964,7 +4958,6 @@ EXP_ST u8 common_fuzz_stuff(char** argv, u8* out_buf, u32 len) {
   if (fault == FAULT_TMOUT) {
 
     if (subseq_tmouts++ > TMOUT_LIMIT) {
-
       cur_skipped_paths++;
       return 1;
     }
@@ -5448,7 +5441,6 @@ static u8 fuzz_one(char** argv) {
   rb_skip_deterministic = 1;
   skip_simple_bitflip = 1;
  }
-
 
 #ifdef IGNORE_FINDS
 
@@ -6438,7 +6430,7 @@ skip_bitflip:
       /* Little endian first. Same deal as with 16-bit: we only want to
          try if the operation would have effect on more than two bytes. */
 
-      stage_val_type = STAGE_VAL_LE; 
+      stage_val_type = STAGE_VAL_LE;
 
       if ((orig & 0xffff) + j > 0xffff && !could_be_bitflip(r1)) {
 
@@ -6807,7 +6799,6 @@ skip_interest:
 
   ex_tmp = ck_alloc(len + MAX_DICT_FILE);
 
-
   for (i = 0; i <= len; i++) {
 
     stage_cur_byte = i;
@@ -6818,7 +6809,6 @@ skip_interest:
         stage_max--; 
         continue;
       }
-
 
       // consult insert map....
       if (!(branch_mask[i] & 4) ){
@@ -6943,8 +6933,6 @@ skip_extras:
 
 havoc_stage:
    
-  // @RB@ TODO: don't havoc if there's nothing to modify :()
-
   stage_cur_byte = -1;
 
   /* The havoc stage mutation code is also invoked when splicing files; if the
@@ -7007,7 +6995,6 @@ havoc_stage:
 
           if((posn = get_random_modifiable_posn(8, 1, temp_len, branch_mask, position_map)) == 0xffffffff) break;
           out_buf[posn] = interesting_8[UR(sizeof(interesting_8))];
-
           break;
 
         case 2:
@@ -7020,7 +7007,6 @@ havoc_stage:
           if (UR(2)) {
 
             *(u16*)(out_buf + posn) =
-
               interesting_16[UR(sizeof(interesting_16) >> 1)];
 
           } else {
@@ -7060,7 +7046,6 @@ havoc_stage:
 
           if((posn = get_random_modifiable_posn(8, 1, temp_len, branch_mask, position_map)) == 0xffffffff) break;
           out_buf[posn] -= 1 + UR(ARITH_MAX);
-
           break;
 
         case 5:
@@ -7113,7 +7098,6 @@ havoc_stage:
             *(u16*)(out_buf + posn) =
               SWAP16(SWAP16(*(u16*)(out_buf + posn)) + num);
 
-
           }
 
           break;
@@ -7160,7 +7144,6 @@ havoc_stage:
             *(u32*)(out_buf + posn) =
               SWAP32(SWAP32(*(u32*)(out_buf + posn)) + num);
 
-
           }
 
           break;
@@ -7199,7 +7182,6 @@ havoc_stage:
             // the +1 copies over the last part of branch_mask
             memmove(branch_mask + del_from, branch_mask + del_from + del_len,
                     temp_len - del_from - del_len + 1);
-
 
             temp_len -= del_len;
 
@@ -7283,7 +7265,6 @@ havoc_stage:
             copy_to   = get_random_modifiable_posn(copy_len * 8, 1, temp_len, branch_mask, position_map);
 
             if (copy_to == 0xffffffff) break;
-
 
             if (UR(4)) {
 
@@ -7433,7 +7414,6 @@ havoc_stage:
     memcpy(branch_mask, orig_branch_mask, len + 1);
 
 
-
     /* If we're finding new stuff, let's run for a bit longer, limits
        permitting. */
 
@@ -7538,7 +7518,6 @@ retry_splicing:
     split_at = f_diff + UR(l_diff - f_diff);
 
     /* Do the thing. */
-
 
     len = target->len;
     memcpy(new_buf, in_buf, split_at);
@@ -7949,6 +7928,7 @@ EXP_ST void check_binary(u8* fname) {
 
     OKF(cPIN "Deferred forkserver binary detected.");
     setenv(DEFER_ENV_VAR, "1", 1);
+    deferred_mode = 1;
 
   } else if (getenv("AFL_DEFER_FORKSRV")) {
 
@@ -8608,6 +8588,10 @@ static char** get_qemu_argv(u8* own_loc, char** argv, int argc) {
   char** new_argv = ck_alloc(sizeof(char*) * (argc + 4));
   u8 *tmp, *cp, *rsl, *own_copy;
 
+  /* Workaround for a QEMU stability glitch. */
+
+  setenv("QEMU_LOG", "nochain", 1);
+
   memcpy(new_argv + 3, argv + 1, sizeof(char*) * argc);
 
   new_argv[2] = target_path;
@@ -8942,7 +8926,6 @@ int main(int argc, char** argv) {
     hang_tmout = atoi(getenv("AFL_HANG_TMOUT"));
     if (!hang_tmout) FATAL("Invalid value of AFL_HANG_TMOUT");
   }
-
 
   if (dumb_mode == 2 && no_forkserver)
     FATAL("AFL_DUMB_FORKSRV and AFL_NO_FORKSRV are mutually exclusive");
