@@ -1,6 +1,6 @@
-# AFL -- Rare Branches (FairFuzz)
+# FairFuzz
 
-An AFL extension to target rare branches. AFL is written and maintained by Michal Zalewski <lcamtuf@google.com>; rare branches extension by Caroline Lemieux <clemieux@cs.berkeley.edu>.
+An AFL extension to increase code coverage by targeting rare branches. FairFuzz has a particular advantage on programs with highly nested structure (packet analyzers, xmllint, programs compiled with [laf-inte](https://lafintel.wordpress.com/), etc). AFL is written and maintained by Michal Zalewski <lcamtuf@google.com>; FairFuzz extension by Caroline Lemieux <clemieux@cs.berkeley.edu>.
 
 
 ## Summary
