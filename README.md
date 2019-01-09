@@ -5,6 +5,8 @@
 
 An AFL extension to increase code coverage by targeting rare branches. FairFuzz has a particular advantage on programs with highly nested structure (packet analyzers, xmllint, programs compiled with [laf-inte](https://lafintel.wordpress.com/), etc). AFL is written and maintained by Michal Zalewski <lcamtuf@google.com>; FairFuzz extension by Caroline Lemieux <clemieux@cs.berkeley.edu>.
 
+Our paper on FairFuzz was [published in ASE 2018](http://www.carolemieux.com/fairfuzz-ase18.pdf). 
+
 
 ## Summary
 
@@ -22,7 +24,7 @@ Evaluation was conducted on on AFL 2.40b. All runs were done with no AFL diction
 | `<!AT` |  1 | 2 | 3| 11|
 | `<!ATT` |  1 | 0 | 0| 1|
 
-More details in [article preprint](https://arxiv.org/abs/1709.07101).
+More details in [article](http://www.carolemieux.com/fairfuzz-ase18.pdf).
 
 ## Technical Summary
 
