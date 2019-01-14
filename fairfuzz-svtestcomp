@@ -1,0 +1,12 @@
+#!/bin/bash
+if [ $# -ne 1 ]; then
+   echo "Usage: $0 test-program-source"
+   exit
+fi
+testprog=$1
+
+make
+./afl-gcc $testprog defs-testcomp.c -o runtest || ./afl-clang $testprog defs-testcomp.c -o runtest
+echo "./afl-fuzz -O -d -i svcomp-inputs/ -o .svcomp-out/ ./runtest"
+rm -r test-suite
+./afl-fuzz -O -d -i svcomp-inputs/ -o .svcomp-out/ ./runtest
