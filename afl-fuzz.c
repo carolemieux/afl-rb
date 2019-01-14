@@ -130,7 +130,8 @@ EXP_ST u8  skip_deterministic,        /* Skip deterministic stages?       */
            run_over10m,               /* Run time over 10 minutes?        */
            persistent_mode,           /* Running in persistent mode?      */
            deferred_mode,             /* Deferred forkserver mode?        */
-           fast_cal;                  /* Try to calibrate faster?         */
+           fast_cal,                  /* Try to calibrate faster?         */
+           sv_test_comp;              /* Test comp mode? (Write XML)      */
 
 static s32 out_fd,                    /* Persistent fd for out_file       */
            dev_urandom_fd = -1,       /* Persistent fd for /dev/urandom   */
@@ -363,6 +364,32 @@ enum {
   /* 04 */ FAULT_NOINST,
   /* 05 */ FAULT_NOBITS
 };
+
+
+void write_xml_testcase(u8 * xml_fn, u8 is_crash) {
+  if (sv_test_comp) {
+    FILE * new_xml = fopen(xml_fn, "w");
+    if (new_xml == NULL) {
+      printf("Ruh roh., Can't open: %s\n", xml_fn);
+      return;
+    }
+    fprintf(new_xml, "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"no\"?>\n<!DOCTYPE testcase PUBLIC \"+//IDN sosy-lab.org//DTD test-format testcase 1.0//EN\" \"https://sosy-lab.org/test-format/testcase-1.0.dtd\">\n");
+    fprintf(new_xml, "<testcase coversError=\"%s\">\n", is_crash ? "true": "false");
+    FILE * old_xml = fopen(".fairfuzz_input_xml", "r");
+    if (new_xml == NULL) {
+      printf("Ruh roh., Can't open: %s\n", ".fairfuzz_input_xml");
+      return;
+    }
+    char c = fgetc(old_xml);
+    while (c != EOF){
+        fputc(c, new_xml);
+        c = fgetc(old_xml);
+    }
+    fprintf(new_xml, "</testcase>");
+    fclose(new_xml);
+    fclose(old_xml);
+  }
+}
 
 
 /* create a new branch mask of the specified size */
@@ -3327,6 +3354,14 @@ static void pivot_inputs(void) {
       if (use_name) use_name += 6; else use_name = rsl;
       nfn = alloc_printf("%s/queue/id:%06u,orig:%s", out_dir, id, use_name);
 
+      if (sv_test_comp){
+        u8 * xml_fn = alloc_printf("test-suite/id:%06u,orig:%s.xml", id,
+                        use_name);
+        write_xml_testcase(xml_fn, 0);
+        ck_free(xml_fn);
+      }
+
+
 #else
 
       nfn = alloc_printf("%s/queue/id_%06u", out_dir, id);
@@ -3340,6 +3375,7 @@ static void pivot_inputs(void) {
     link_or_copy(q->fname, nfn);
     ck_free(q->fname);
     q->fname = nfn;
+
 
     /* Make sure that the passed_det value carries over, too. */
 
@@ -3488,7 +3524,7 @@ static u8 save_if_interesting(char** argv, void* mem, u32 len, u8 fault) {
                       describe_op(hnb));
 
 
-    const char * xml_fn = alloc_printf("%s/id:%06u,%s.xml", out_dir, queued_paths,
+    u8 * xml_fn = alloc_printf("test-suite/id:%06u,%s.xml", queued_paths,
                       describe_op(hnb));
 
 #else
@@ -3520,22 +3556,13 @@ static u8 save_if_interesting(char** argv, void* mem, u32 len, u8 fault) {
       if (fd < 0) PFATAL("Unable to create '%s'", fn);
       ck_write(fd, mem, len, fn);
 
-      FILE * new_xml = fopen(xml_fn, "w");
-      if (new_xml == NULL) printf("Ruh roh., Can't open: %s\n", xml_fn);
-      fprintf(new_xml, "<testcase>\n");
-      FILE * old_xml = fopen(".fairfuzz_input_xml", "r");
-      char c = fgetc(old_xml);
-      while (c != EOF){
-          fputc(c, new_xml);
-          c = fgetc(old_xml);
-      }
-      fprintf(new_xml, "</testcase>");
-      fclose(new_xml);
-      fclose(old_xml);
+      write_xml_testcase(xml_fn, /*has_crash*/ 0);
 
 
       close(fd);
     } 
+
+    ck_free(xml_fn);
 
     keeping = 1;
 
@@ -3592,6 +3619,14 @@ static u8 save_if_interesting(char** argv, void* mem, u32 len, u8 fault) {
 
       fn = alloc_printf("%s/hangs/id:%06llu,%s", out_dir,
                         unique_hangs, describe_op(0));
+      if (sv_test_comp){
+        u8 * xml_fn = alloc_printf("test-suite/hang-id:%06llu,%s.xml",
+                          unique_hangs,  describe_op(0));
+        write_xml_testcase(xml_fn, 1);
+        ck_free(xml_fn);
+
+      }
+
 
 #else
 
@@ -3636,6 +3671,13 @@ keep_as_crash:
 
       fn = alloc_printf("%s/crashes/id:%06llu,sig:%02u,%s", out_dir,
                         unique_crashes, kill_signal, describe_op(0));
+      if (sv_test_comp) {
+        u8 * xml_fn = alloc_printf("test-suite/crash-id:%06llu,sig:%02u,%s.xml",
+                          unique_crashes, kill_signal, describe_op(0));
+        write_xml_testcase(xml_fn, 1);
+        ck_free(xml_fn);
+      }
+
 
 #else
 
@@ -3666,6 +3708,7 @@ keep_as_crash:
   close(fd);
 
   ck_free(fn);
+
 
   return keeping;
 
@@ -8089,6 +8132,12 @@ EXP_ST void setup_dirs_fds(void) {
 
   ACTF("Setting up output directories...");
 
+  if (sv_test_comp) {
+    if (mkdir("test-suite", 0700)) {
+            PFATAL("Unable to create 'test-suite': please remove directory if it exists.");
+    }
+  }
+
   if (sync_id && mkdir(sync_dir, 0700) && errno != EEXIST)
       PFATAL("Unable to create '%s'", sync_dir);
 
@@ -8729,9 +8778,13 @@ int main(int argc, char** argv) {
   gettimeofday(&tv, &tz);
   srandom(tv.tv_sec ^ tv.tv_usec ^ getpid());
 
-  while ((opt = getopt(argc, argv, "+bq:rsi:o:f:m:t:T:dnCB:S:M:x:Q")) > 0)
+  while ((opt = getopt(argc, argv, "+Obq:rsi:o:f:m:t:T:dnCB:S:M:x:Q")) > 0)
 
     switch (opt) {
+
+      case 'O':
+        sv_test_comp = 1;
+        break;
 
       case 'b': /* disable use of branch mask */
         use_branch_mask = 0;
