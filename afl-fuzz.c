@@ -2586,6 +2586,9 @@ static u8 run_target(char** argv, u32 timeout) {
   static struct itimerval it;
   static u32 prev_timed_out = 0;
 
+  if (remove(".fairfuzz_input_xml") > 0) printf("Ruh roh, can't remove\n");
+
+
   int status = 0;
   u32 tb4;
 
@@ -3484,6 +3487,10 @@ static u8 save_if_interesting(char** argv, void* mem, u32 len, u8 fault) {
     fn = alloc_printf("%s/queue/id:%06u,%s", out_dir, queued_paths,
                       describe_op(hnb));
 
+
+    const char * xml_fn = alloc_printf("%s/id:%06u,%s.xml", out_dir, queued_paths,
+                      describe_op(hnb));
+
 #else
 
     fn = alloc_printf("%s/queue/id_%06u", out_dir, queued_paths);
@@ -3512,6 +3519,20 @@ static u8 save_if_interesting(char** argv, void* mem, u32 len, u8 fault) {
       fd = open(fn, O_WRONLY | O_CREAT | O_EXCL, 0600);
       if (fd < 0) PFATAL("Unable to create '%s'", fn);
       ck_write(fd, mem, len, fn);
+
+      FILE * new_xml = fopen(xml_fn, "w");
+      if (new_xml == NULL) printf("Ruh roh., Can't open: %s\n", xml_fn);
+      fprintf(new_xml, "<testcase>\n");
+      FILE * old_xml = fopen(".fairfuzz_input_xml", "r");
+      char c = fgetc(old_xml);
+      while (c != EOF){
+          fputc(c, new_xml);
+          c = fgetc(old_xml);
+      }
+      fprintf(new_xml, "</testcase>");
+      fclose(new_xml);
+      fclose(old_xml);
+
 
       close(fd);
     } 
@@ -4946,7 +4967,6 @@ EXP_ST u8 common_fuzz_stuff(char** argv, u8* out_buf, u32 len) {
     if (!out_buf || !len) return 0;
 
   }
-
   write_to_testcase(out_buf, len);
 
   fault = run_target(argv, exec_tmout);
