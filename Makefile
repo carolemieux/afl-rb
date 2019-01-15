@@ -18,13 +18,13 @@ VERSION     = $(shell grep '^\#define VERSION ' config.h | cut -d '"' -f2)
 
 PREFIX     ?= /usr/local
 BIN_PATH    = $(PREFIX)/bin
-HELPER_PATH = $(PREFIX)/lib/afl
-DOC_PATH    = $(PREFIX)/share/doc/afl
-MISC_PATH   = $(PREFIX)/share/afl
+HELPER_PATH = $(PREFIX)/lib/fairfuzz
+DOC_PATH    = $(PREFIX)/share/doc/fairfuzz
+MISC_PATH   = $(PREFIX)/share/fairfuzz
 
 # PROGS intentionally omit afl-as, which gets installed elsewhere.
 
-PROGS       = afl-gcc afl-fuzz afl-showmap afl-tmin afl-gotcpu afl-analyze
+PROGS       = afl-gcc afl-fuzz-fairfuzz afl-showmap afl-tmin afl-gotcpu afl-analyze
 SH_PROGS    = afl-plot afl-cmin afl-whatsup
 
 CFLAGS     ?= -O3 -funroll-loops
@@ -69,7 +69,7 @@ afl-as: afl-as.c afl-as.h $(COMM_HDR) | test_x86
 	$(CC) $(CFLAGS) $@.c -o $@ $(LDFLAGS)
 	ln -sf afl-as as
 
-afl-fuzz: afl-fuzz.c $(COMM_HDR) | test_x86
+afl-fuzz-fairfuzz: afl-fuzz-fairfuzz.c $(COMM_HDR) | test_x86
 	$(CC) $(CFLAGS) $@.c -o $@ $(LDFLAGS)
 
 afl-showmap: afl-showmap.c $(COMM_HDR) | test_x86
@@ -121,6 +121,10 @@ install: all
 	mkdir -p -m 755 $${DESTDIR}$(BIN_PATH) $${DESTDIR}$(HELPER_PATH) $${DESTDIR}$(DOC_PATH) $${DESTDIR}$(MISC_PATH)
 	rm -f $${DESTDIR}$(BIN_PATH)/afl-plot.sh
 	install -m 755 $(PROGS) $(SH_PROGS) $${DESTDIR}$(BIN_PATH)
+	install -m 755 fairfuzz-svtestcomp $${DESTDIR}$(BIN_PATH)
+	install -m 755 defs-testcomp.c $${DESTDIR}$(HELPER_PATH)
+	mkdir -p -m 755 $${DESTDIR}$(HELPER_PATH)/svcomp-inputs
+	install -m 755 blank-input $${DESTDIR}$(HELPER_PATH)/svcomp-inputs
 	rm -f $${DESTDIR}$(BIN_PATH)/afl-as
 	if [ -f afl-qemu-trace ]; then install -m 755 afl-qemu-trace $${DESTDIR}$(BIN_PATH); fi
 ifndef AFL_TRACE_PC
