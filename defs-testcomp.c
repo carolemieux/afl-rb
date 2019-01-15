@@ -32,7 +32,7 @@ verifier_nondet(bool, i);
 verifier_nondet(char, u);
 verifier_nondet(float, f);
 verifier_nondet(double, f);
-verifier_nondet(off_t, lli);
+verifier_nondet(off_t, li);
 #ifdef loff_t
 verifier_nondet(loff_t, lli);
 #endif
@@ -43,7 +43,7 @@ verifier_nondet(u32, lli);
 verifier_nondet(sector_t, lli);
 #endif
 verifier_nondet(long, li);
-verifier_nondet(pthread_t, p);
+verifier_nondet(pthread_t, lu);
 verifier_nondet(short, i);
 verifier_nondet(size_t, lu);
 verifier_nondet_name(uchar, unsigned char, u);
