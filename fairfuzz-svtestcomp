@@ -4,10 +4,21 @@ if [ $# -ne 1 ]; then
    exit
 fi
 testprog=$1
+DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )"
+HELPER_PATH=$DIR/../lib/fairfuzz/
+export AFL_PATH=${HELPER_PATH}
+echo $AFL_PATH
 
 make
-./afl-gcc $testprog defs-testcomp.c -o runtest || ./afl-clang $testprog defs-testcomp.c -o runtest
-echo "./afl-fuzz -O -d -i svcomp-inputs/ -o .svcomp-out/ ./runtest"
+afl-gcc $testprog ${HELPER_PATH}defs-testcomp.c -o runtest || afl-clang $testprog ${HELPER_PATH}defs-testcomp.c -o runtest
 rm -r test-suite
 rm -r .svcomp-out
-./afl-fuzz -O -d -i svcomp-inputs/ -o .svcomp-out/ ./runtest
+afl-fuzz-fairfuzz -O -d -i ${HELPER_PATH}svcomp-inputs/ -o .svcomp-out/ ./runtest
+if [ $? -ne 0 ]; then
+  echo "ERROR: couldn't run FairFuzz"
+fi
+if [ $(ls -l test-suite/ | grep crash | wc -l) -gt 0 ]; then
+  echo "CRASHES FOUND"
+fi
+echo "DONE RUNNING"
+
