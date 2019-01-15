@@ -376,7 +376,7 @@ void write_xml_testcase(u8 * xml_fn, u8 is_crash) {
     fprintf(new_xml, "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"no\"?>\n<!DOCTYPE testcase PUBLIC \"+//IDN sosy-lab.org//DTD test-format testcase 1.0//EN\" \"https://sosy-lab.org/test-format/testcase-1.0.dtd\">\n");
     fprintf(new_xml, "<testcase coversError=\"%s\">\n", is_crash ? "true": "false");
     FILE * old_xml = fopen(".fairfuzz_input_xml", "r");
-    if (new_xml == NULL) {
+    if (old_xml == NULL) {
       printf("Ruh roh., Can't open: %s\n", ".fairfuzz_input_xml");
       return;
     }
@@ -5465,6 +5465,7 @@ static u8 could_be_interest(u32 old_val, u32 new_val, u8 blen, u8 check_le) {
 
 static u8 fuzz_one(char** argv) {
 
+
   s32 len, fd, temp_len, i, j;
   u8  *in_buf, *out_buf, *orig_in, *ex_tmp, *eff_map = 0;
   u64 havoc_queued,  orig_hit_cnt, new_hit_cnt;
@@ -9070,6 +9071,7 @@ int main(int argc, char** argv) {
   write_stats_file(0, 0, 0);
   save_auto();
 
+
   if (stop_soon) goto stop_fuzzing;
 
   /* Woop woop woop */
@@ -9139,6 +9141,13 @@ int main(int argc, char** argv) {
     }
 
     if (!stop_soon && exit_1) stop_soon = 2;
+
+      // Stopping more eagerly than a regular fuzzing run.
+    if (sv_test_comp) {
+      u64 min_wo_finds = (get_cur_time() - last_path_time) / 1000 / 60;
+      if ((cycles_wo_finds > 10 && !pending_not_fuzzed) || cycles_wo_finds > 100 || min_wo_finds > 10)
+        stop_soon = 1;
+    }
 
     if (stop_soon) break;
 
