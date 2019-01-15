@@ -9,4 +9,5 @@ make
 ./afl-gcc $testprog defs-testcomp.c -o runtest || ./afl-clang $testprog defs-testcomp.c -o runtest
 echo "./afl-fuzz -O -d -i svcomp-inputs/ -o .svcomp-out/ ./runtest"
 rm -r test-suite
+rm -r .svcomp-out
 ./afl-fuzz -O -d -i svcomp-inputs/ -o .svcomp-out/ ./runtest
