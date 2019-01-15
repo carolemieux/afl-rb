@@ -1,9 +1,14 @@
 #!/bin/bash
-if [ $# -ne 1 ]; then
+if [ $# -lt 1 ]; then
    echo "FairFuzz Version TC-0.0.1"
    echo "Usage: $0 [test-program-sources]"
    exit
 fi
+if [ $1 = "--version" ]; then
+   echo "FairFuzz Version TC-0.0.1"
+   exit
+fi
+
 DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )"
 if [ -d $DIR/../lib/fairfuzz/ ]; then
    HELPER_PATH=$DIR/../lib/fairfuzz
@@ -13,6 +18,7 @@ fi
 export AFL_PATH=${HELPER_PATH}
 echo $AFL_PATH
 
+rm runtest
 $DIR/afl-gcc $@ ${HELPER_PATH}/defs-testcomp.c -o runtest || $DIR/afl-clang $@ ${HELPER_PATH}/defs-testcomp.c -o runtest
 rm -r test-suite
 rm -r .svcomp-out
