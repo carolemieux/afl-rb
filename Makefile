@@ -124,7 +124,7 @@ install: all
 	install -m 755 fairfuzz-svtestcomp $${DESTDIR}$(BIN_PATH)
 	install -m 755 defs-testcomp.c $${DESTDIR}$(HELPER_PATH)
 	mkdir -p -m 755 $${DESTDIR}$(HELPER_PATH)/svcomp-inputs
-	install -m 755 blank-input $${DESTDIR}$(HELPER_PATH)/svcomp-inputs
+	install -m 755 svcomp-inputs/blank-input $${DESTDIR}$(HELPER_PATH)/svcomp-inputs
 	rm -f $${DESTDIR}$(BIN_PATH)/afl-as
 	if [ -f afl-qemu-trace ]; then install -m 755 afl-qemu-trace $${DESTDIR}$(BIN_PATH); fi
 ifndef AFL_TRACE_PC
