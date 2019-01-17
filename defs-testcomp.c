@@ -27,6 +27,8 @@ void __VERIFIER_error(){
    abort();
 }
 
+void __VERIFIER_assume(int expression) { if (!expression) { LOOP: goto LOOP; }; return; }
+
 verifier_nondet(int, i);
 verifier_nondet(bool, i);
 verifier_nondet(char, u);
@@ -52,6 +54,20 @@ verifier_nondet_name(ulong, unsigned long, lu);
 verifier_nondet_name(ushort, unsigned short, u);
 verifier_nondet(unsigned, u);
 
+bool __VERIFIER_nondet_bool(){ 
+  char buf[16];
+  memset(&buf, 0, sizeof(bool));
+  bool value;
+  if (read( 0, buf, sizeof(bool))>0) {
+      memcpy(&value, &buf, sizeof(bool));
+  } 
+  else {
+      memcpy(&value, &buf, sizeof(bool));
+  }
+  FILE * input_file = fopen(".fairfuzz_input_xml", "a");
+  fprintf(input_file, "<input type=\"bool\"> %i </input>\n", value);
+  return value;
+}
 
 void * __VERIFIER_nondet_pointer(){ 
   char buf[16];
@@ -77,3 +93,4 @@ char * __VERIFIER_nondet_pchar(){
   fprintf(input_file, "<input type=\"pointer\"> %s </input>\n", buf);
   return buf;
 }
+
