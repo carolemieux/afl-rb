@@ -34,7 +34,7 @@ echo "[FF-DEBUG] AFL/HELPER path: $HELPER_PATH, ls:"
 ls $HELPER_PATH
 
 rm -f runtest
-$DIR/afl-gcc $@ ${HELPER_PATH}/defs-testcomp.c -o runtest || $DIR/afl-clang $@ ${HELPER_PATH}/defs-testcomp.c -o runtest
+$DIR/afl-gcc  ${HELPER_PATH}/defs-testcomp.c $@ -o runtest || $DIR/afl-clang ${HELPER_PATH}/defs-testcomp.c $@ -o runtest
 rm -rf test-suite
 rm -rf .svcomp-out
 $DIR/afl-fuzz-fairfuzz -O -d -i ${HELPER_PATH}/svcomp-inputs/ -o .svcomp-out/ ./runtest
