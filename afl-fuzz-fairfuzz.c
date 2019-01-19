@@ -3621,7 +3621,7 @@ static u8 save_if_interesting(char** argv, void* mem, u32 len, u8 fault) {
       if (sv_test_comp){
         u8 * xml_fn = alloc_printf("test-suite/hang-id:%06llu,%s.xml",
                           unique_hangs,  describe_op(0));
-        write_xml_testcase(xml_fn, 1);
+        write_xml_testcase(xml_fn, 0);
         ck_free(xml_fn);
 
       }
