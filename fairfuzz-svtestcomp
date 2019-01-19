@@ -30,6 +30,8 @@ else
 fi
 export AFL_PATH=${HELPER_PATH}
 export AFL_NO_AFFINITY=1
+export AFL_SKIP_CPUFREQ=1
+export AFL_SKIP_CRASHES=1
 echo "[FF-DEBUG] AFL/HELPER path: $HELPER_PATH, ls:"
 ls $HELPER_PATH
 
@@ -46,3 +48,4 @@ if [ $(ls -l test-suite/ | grep crash | wc -l) -gt 0 ]; then
 fi
 echo "DONE RUNNING"
 
+echo "[FF-DEBUG] $(tail -n +1  test-suite/*orig*)"
