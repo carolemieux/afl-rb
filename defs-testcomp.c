@@ -30,7 +30,6 @@ void __VERIFIER_error(){
 void __VERIFIER_assume(int expression) { if (!expression) { LOOP: goto LOOP; }; return; }
 
 verifier_nondet(int, i);
-verifier_nondet(bool, i);
 verifier_nondet(char, u);
 verifier_nondet(float, f);
 verifier_nondet(double, f);
