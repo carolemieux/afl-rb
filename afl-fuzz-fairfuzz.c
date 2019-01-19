@@ -3098,6 +3098,13 @@ static void perform_dry_run(char** argv) {
 
         if (q == queue) check_map_coverage();
 
+        if (sv_test_comp){
+	  u8 * xml_fn = alloc_printf("test-suite/%s.xml", basename(q->fname));
+          write_xml_testcase(xml_fn, 0);
+          ck_free(xml_fn);
+        }
+
+
         if (crash_mode) FATAL("Test case '%s' does *NOT* crash", fn);
 
         break;
@@ -3353,14 +3360,6 @@ static void pivot_inputs(void) {
 
       if (use_name) use_name += 6; else use_name = rsl;
       nfn = alloc_printf("%s/queue/id:%06u,orig:%s", out_dir, id, use_name);
-
-      if (sv_test_comp){
-        u8 * xml_fn = alloc_printf("test-suite/id:%06u,orig:%s.xml", id,
-                        use_name);
-        write_xml_testcase(xml_fn, 0);
-        ck_free(xml_fn);
-      }
-
 
 #else
 
