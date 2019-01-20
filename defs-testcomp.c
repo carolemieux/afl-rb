@@ -17,7 +17,7 @@ type __VERIFIER_nondet_##typename(){ \
       memcpy(&value, &buf, sizeof(type));\
   }\
   FILE * input_file = fopen(".fairfuzz_input_xml", "a");\
-  fprintf(input_file, "<input type=\""#type"\"> %"#printchar" </input>\n", value);\
+  fprintf(input_file, "<input type=\""#type"\">%"#printchar"</input>\n", value);\
   fclose(input_file);\
   return value;\
 }
@@ -65,7 +65,7 @@ bool __VERIFIER_nondet_bool(){
       memcpy(&value, &buf, sizeof(bool));
   }
   FILE * input_file = fopen(".fairfuzz_input_xml", "a");
-  fprintf(input_file, "<input type=\"bool\"> %i </input>\n", value);
+  fprintf(input_file, "<input type=\"bool\">%i</input>\n", value);
   fclose(input_file);
   return value;
 }
@@ -81,7 +81,7 @@ void * __VERIFIER_nondet_pointer(){
       memcpy(&value, &buf, sizeof(void *));
   }
   FILE * input_file = fopen(".fairfuzz_input_xml", "a");
-  fprintf(input_file, "<input type=\"pointer\"> %p </input>\n", value);
+  fprintf(input_file, "<input type=\"pointer\">%p</input>\n", value);
   fclose(input_file);
   return value;
 }
@@ -92,7 +92,7 @@ char * __VERIFIER_nondet_pchar(){
   memset(buf, 0, 17);
   int chars_read= read( 0, buf, 16); 
   FILE * input_file = fopen(".fairfuzz_input_xml", "a");
-  fprintf(input_file, "<input type=\"pointer\"> %s </input>\n", buf);
+  fprintf(input_file, "<input type=\"pointer\">%s</input>\n", buf);
   fclose(input_file);
   return buf;
 }

@@ -9146,7 +9146,7 @@ int main(int argc, char** argv) {
       u64 min_wo_finds = 0;
       if (last_path_time > 0)
          min_wo_finds = (get_cur_time() - last_path_time) / 1000 / 60;
-      if ((cycles_wo_finds > 10 && !pending_not_fuzzed) || cycles_wo_finds > 100 || min_wo_finds > 10)
+      if ( cycles_wo_finds > 10 || min_wo_finds > 10)
         stop_soon = 1;
     }
 

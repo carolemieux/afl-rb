@@ -1,26 +1,20 @@
 #!/bin/bash
 if [ $# -lt 1 ]; then
-   echo "FairFuzz Version TC-0.0.1"
+   echo "FairFuzz Version TC-0.0.2"
    echo "Usage: $0 [test-program-sources]"
    exit
 fi
 if [ $1 = "--version" ]; then
-   echo "FairFuzz Version TC-0.0.1"
+   echo "FairFuzz Version TC-0.0.2"
    exit
 fi
 
-echo "[FF-DEBUG] My input arguments: $@"
 
-echo "[FF-DEBUG] pwd:"
-pwd
-echo "[FF-DEBUG] ls:"
-ls
+echo "FairFuzz Version TC-0.0.2"
+echo "Input arguments: $@"
+
 DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )"
-echo "[FF-DEBUG] DIR is: $DIR"
-echo "[FF-DEBUG] ls in $DIR:"
-ls $DIR
-echo "[FF-DEBUG] ls in ..:"
-ls ..
+
 if [ -d $DIR/../lib/fairfuzz/ ]; then
    HELPER_PATH=$DIR/../lib/fairfuzz
 elif [ -d $DIR/../helper ]; then
@@ -32,14 +26,14 @@ export AFL_PATH=${HELPER_PATH}
 export AFL_NO_AFFINITY=1
 export AFL_SKIP_CPUFREQ=1
 export AFL_SKIP_CRASHES=1
-echo "[FF-DEBUG] AFL/HELPER path: $HELPER_PATH, ls:"
-ls $HELPER_PATH
+echo "[FF-DEBUG] AFL/HELPER path: $HELPER_PATH"
 
 rm -f runtest
 $DIR/afl-gcc  ${HELPER_PATH}/defs-testcomp.c $@ -o runtest || $DIR/afl-clang ${HELPER_PATH}/defs-testcomp.c $@ -o runtest
 rm -rf test-suite
 rm -rf .svcomp-out
-$DIR/afl-fuzz-fairfuzz -t1000+ -O -d -i ${HELPER_PATH}/svcomp-inputs/ -o .svcomp-out/ ./runtest
+rm -rf .fairfuzz_input_xml
+$DIR/afl-fuzz-fairfuzz -m 7000 -t1000+ -O -d -i ${HELPER_PATH}/svcomp-inputs/ -o .svcomp-out/ ./runtest
 if [ $? -ne 0 ]; then
   echo "ERROR: couldn't run FairFuzz"
 fi
@@ -48,4 +42,3 @@ if [ $(ls -l test-suite/ | grep crash | wc -l) -gt 0 ]; then
 fi
 echo "DONE RUNNING"
 
-echo "[FF-DEBUG] $(tail -n +1  test-suite/*orig*)"
