@@ -8134,7 +8134,7 @@ EXP_ST void setup_dirs_fds(void) {
 
   if (sv_test_comp) {
     if (mkdir("test-suite", 0700)) {
-            PFATAL("Unable to create 'test-suite': please remove directory if it exists.");
+            //PFATAL("Unable to create 'test-suite': please remove directory if it exists.");
     }
   }
 
