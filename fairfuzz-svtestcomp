@@ -33,6 +33,20 @@ $DIR/afl-gcc  ${HELPER_PATH}/defs-testcomp.c $@ -o runtest || $DIR/afl-clang ${H
 rm -rf test-suite
 rm -rf .svcomp-out
 rm -rf .fairfuzz_input_xml
+
+mkdir test-suite
+chmod 700 test-suite
+echo "<test-metadata>" >> test-suite/metadata.xml
+echo " <sourcecodelang>C</sourcecodelang>" >> test-suite/metadata.xml
+echo " <producer>FairFuzz TC-0.0.2</producer>" >> test-suite/metadata.xml
+echo " <specification>COVER( init(main()), FQL(COVER EDGES(@DECISIONEDGE)) )</specification>" >> test-suite/metadata.xml
+echo " <programfile>$1</programfile>" >> test-suite/metadata.xml
+echo " <programhash>`cat $1 | sha256sum`</programhash>" >> test-suite/metadata.xml
+echo " <entryfunction>main</entryfunction>" >> test-suite/metadata.xml
+echo " <architecture>32bit</architecture>" >> test-suite/metadata.xml
+echo " <creationtime>`date --utc --iso-8601=seconds` </creationtime>" >> test-suite/metadata.xml
+echo "</test-metadata>" >> test-suite/metadata.xml
+
 $DIR/afl-fuzz-fairfuzz -m 7000 -t1000+ -O -d -i ${HELPER_PATH}/svcomp-inputs/ -o .svcomp-out/ ./runtest
 if [ $? -ne 0 ]; then
   echo "ERROR: couldn't run FairFuzz"
